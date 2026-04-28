@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FunnelHaus | Funnel Building Agency For Infoproduct Creators</title>
+  <meta name="description" content="Revenue growth partner for coaches and course creators making $15k+/month. We build story-driven sales funnels for coaches looking to grow." />
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ─── Design tokens ─────────────────────────────── */
+    :root {
+      --red:        #700000;
+      --red-dark:   #580000;
+      --red-faint:  rgba(112,0,0,0.07);
+      --dark:       #111111;
+      --dark-2:     #1c1c1c;
+      --text:       #242424;
+      --muted:      #6a6a6a;
+      --light:      #b0b0b0;
+      --border:     rgba(0,0,0,0.08);
+      --cream:      #fffefa;
+      --white:      #ffffff;
+      --off-white:  #f4f2ec;
+      --r:          12px;
+      --r-lg:       20px;
+      --r-xl:       28px;
+    }
+
+    /* ─── Reset ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--cream);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    img, video { max-width: 100%; display: block; }
+    a { text-decoration: none; color: inherit; }
+
+    /* ─── Layout ─────────────────────────────────────── */
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 28px;
+    }
+
+    /* ─── Eyebrow tag ────────────────────────────────── */
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .eyebrow::before {
+      content: '';
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--red);
+      flex-shrink: 0;
+    }
+
+    /* ─── Buttons ────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 20px;
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+      border: none;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--red);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: var(--red-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(112,0,0,0.28);
+    }
+    .btn-lg { padding: 15px 28px; font-size: 15px; }
+
+    .btn-arrow {
+      width: 30px; height: 30px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .btn-arrow svg { width: 11px; height: 11px; }
+
+    /* ─── Scroll reveal ──────────────────────────────── */
+    .fade {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+    .fade.in { opacity: 1; transform: none; }
+    .fade-d1 { transition-delay: 0.08s; }
+    .fade-d2 { transition-delay: 0.16s; }
+    .fade-d3 { transition-delay: 0.24s; }
+    .fade-d4 { transition-delay: 0.32s; }
+    .fade-d5 { transition-delay: 0.40s; }
+
+    /* Hero items animate on load */
+    .hero .fade { opacity: 1; transform: none; animation: fadeUp 0.7s ease both; }
+    .hero .fade-d1 { animation-delay: 0.10s; }
+    .hero .fade-d2 { animation-delay: 0.20s; }
+    .hero .fade-d3 { animation-delay: 0.30s; }
+    .hero .fade-d4 { animation-delay: 0.42s; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(22px); }
+      to   { opacity: 1; transform: none; }
+    }
+
+
+    /* ════════════════════════════════════════════════
+       NAVBAR
+    ════════════════════════════════════════════════ */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,254,250,0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      transition: box-shadow 0.3s ease;
+    }
+    nav.scrolled { box-shadow: 0 2px 20px rgba(0,0,0,0.07); }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 66px;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .nav-logo svg { width: 26px; height: auto; }
+    .nav-logo-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--dark);
+    }
+
+
+    /* ════════════════════════════════════════════════
+       HERO
+    ════════════════════════════════════════════════ */
+    .hero {
+      padding: 156px 0 96px;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      background: rgba(112,0,0,0.07);
+      border: 1px solid rgba(112,0,0,0.14);
+      border-radius: 100px;
+      padding: 5px 14px 5px 5px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--red);
+      margin-bottom: 32px;
+    }
+    .hero-badge-dot {
+      width: 8px; height: 8px;
+      background: var(--red);
+      border-radius: 50%;
+      animation: blink 2.4s infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .hero h1 {
+      font-size: clamp(38px, 6.2vw, 78px);
+      font-weight: 700;
+      letter-spacing: -0.028em;
+      line-height: 1.04;
+      color: var(--dark);
+      max-width: 940px;
+      margin: 0 auto 26px;
+    }
+
+    .hero-sub {
+      font-size: clamp(16px, 1.8vw, 19px);
+      color: var(--muted);
+      max-width: 540px;
+      margin: 0 auto 40px;
+      line-height: 1.72;
+    }
+
+    .hero-cta {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .hero-note {
+      font-size: 13px;
+      color: var(--light);
+    }
+
+
+    /* ════════════════════════════════════════════════
+       CREDIBILITY STRIP  (replaces stats bar)
+    ════════════════════════════════════════════════ */
+    .cred-strip {
+      background: var(--dark);
+      padding: 40px 0;
+    }
+
+    .cred-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .cred-main {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .cred-num {
+      font-size: clamp(40px, 5vw, 60px);
+      font-weight: 700;
+      letter-spacing: -0.045em;
+      color: #fff;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .cred-divider {
+      width: 1px;
+      height: 48px;
+      background: rgba(255,255,255,0.12);
+      flex-shrink: 0;
+    }
+
+    .cred-context {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .cred-context-top {
+      font-size: 14px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.82);
+      letter-spacing: -0.01em;
+    }
+    .cred-context-sub {
+      font-size: 13px;
+      color: rgba(255,255,255,0.36);
+    }
+
+    .cred-points {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .cred-point {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.46);
+      white-space: nowrap;
+    }
+    .cred-dot {
+      width: 5px; height: 5px;
+      background: var(--red);
+      border-radius: 50%;
+      flex-shrink: 0;
+      opacity: 0.8;
+    }
+
+
+    /* ════════════════════════════════════════════════
+       PROBLEM SECTION
+    ════════════════════════════════════════════════ */
+    .problem {
+      padding: 100px 0;
+      background: var(--white);
+    }
+
+    .problem-box {
+      border: 3px dashed rgba(0,0,0,0.13);
+      border-radius: var(--r-xl);
+      padding: 68px 80px;
+      max-width: 880px;
+      margin: 0 auto;
+    }
+
+    .problem-h {
+      font-size: clamp(30px, 3.8vw, 46px);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.14;
+      color: var(--dark);
+      margin-bottom: 32px;
+    }
+    .problem-h em { font-style: italic; color: var(--red); }
+
+    .prose {
+      font-size: 17px;
+      color: var(--muted);
+      line-height: 1.78;
+    }
+    .prose p { margin-bottom: 18px; }
+    .prose p:last-child { margin-bottom: 0; }
+
+    .problem-accent {
+      font-size: clamp(19px, 2.2vw, 24px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--red);
+      margin: 36px 0 24px;
+    }
+
+    .numbered-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    .numbered-list li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      font-size: 17px;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .n-badge {
+      min-width: 26px; height: 26px;
+      background: var(--red);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+      flex-shrink: 0;
+    }
+
+    .problem-cta-line {
+      font-size: clamp(19px, 2.2vw, 24px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--red);
+      margin-top: 36px;
+    }
+
+
+    /* ════════════════════════════════════════════════
+       RESULTS / TESTIMONIALS  (single column)
+    ════════════════════════════════════════════════ */
+    .results {
+      padding: 100px 0;
+      background: var(--off-white);
+    }
+
+    .section-head {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+    .section-head .eyebrow { margin-bottom: 14px; }
+    .section-head h2 {
+      font-size: clamp(30px, 4.2vw, 52px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      color: var(--dark);
+    }
+    .section-head .sub {
+      font-size: 17px;
+      color: var(--muted);
+      margin-top: 14px;
+    }
+
+    /* Single-column testimonial list */
+    .t-list {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .t-card {
+      background: var(--white);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.055);
+      transition: transform 0.22s ease, box-shadow 0.22s ease;
+    }
+    .t-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.09);
+    }
+
+    /* Card header: avatar + name/role + result */
+    .t-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .t-client {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .t-avatar {
+      width: 46px; height: 46px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--off-white);
+    }
+
+    .t-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--dark);
+      margin-bottom: 2px;
+    }
+    .t-role {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .t-result {
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .t-result-num {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: var(--red);
+      line-height: 1;
+    }
+    .t-result-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+      white-space: nowrap;
+    }
+
+    /* Media area: off-white padded background */
+    .t-media-area {
+      background: var(--off-white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 24px 20px;
+    }
+
+    /* Louis landscape video: 68% width */
+    .t-media-landscape {
+      width: 68%;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.13);
+    }
+    .t-media-landscape video {
+      width: 100%;
+      aspect-ratio: 16/9;
+      display: block;
+      background: #000;
+    }
+
+    /* Kirk portrait video: 36% width */
+    .t-media-portrait {
+      width: 36%;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.13);
+    }
+    .t-media-portrait video {
+      width: 100%;
+      aspect-ratio: 9/16;
+      display: block;
+      background: #000;
+    }
+
+    /* Julian screenshot: 44% width */
+    .t-media-screenshot {
+      width: 44%;
+    }
+    .t-media-screenshot img {
+      width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.14);
+    }
+
+
+    /* ════════════════════════════════════════════════
+       HOW IT WORKS
+    ════════════════════════════════════════════════ */
+    .how {
+      padding: 100px 0;
+      background: var(--white);
+    }
+
+    .steps {
+      margin-top: 72px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 160px 1fr 1fr;
+      gap: 52px;
+      align-items: center;
+      padding: 60px 0;
+    }
+    .step:not(:last-child) {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-num-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .step-ordinal {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .step-big-num {
+      font-size: 88px;
+      font-weight: 700;
+      letter-spacing: -0.05em;
+      line-height: 1;
+      color: rgba(0,0,0,0.05);
+      user-select: none;
+    }
+
+    .step-content { display: flex; flex-direction: column; gap: 14px; }
+    .step-title {
+      font-size: clamp(26px, 2.8vw, 34px);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--dark);
+      line-height: 1.15;
+    }
+    .step-body {
+      font-size: 16px;
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .pill {
+      background: var(--red-faint);
+      color: var(--red);
+      padding: 4px 13px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .step-img {
+      border-radius: var(--r);
+      overflow: hidden;
+      box-shadow: 0 4px 28px rgba(0,0,0,0.08);
+    }
+    .step-img img { width: 100%; height: auto; display: block; }
+
+
+    /* ════════════════════════════════════════════════
+       BOOKING / CTA
+    ════════════════════════════════════════════════ */
+    .booking {
+      padding: 100px 0 80px;
+      background: var(--dark);
+      text-align: center;
+    }
+
+    .booking .eyebrow {
+      color: rgba(255,255,255,0.38);
+      margin-bottom: 18px;
+      display: flex;
+      justify-content: center;
+    }
+    .booking .eyebrow::before { background: rgba(255,255,255,0.3); }
+
+    .booking h2 {
+      font-size: clamp(30px, 4.2vw, 52px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      color: #fff;
+      max-width: 680px;
+      margin: 0 auto 18px;
+    }
+
+    .booking-sub {
+      font-size: 17px;
+      color: rgba(255,255,255,0.46);
+      max-width: 460px;
+      margin: 0 auto 52px;
+      line-height: 1.7;
+    }
+
+    .cal-wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      background: var(--white);
+      border-radius: var(--r-xl);
+      overflow: hidden;
+      min-height: 580px;
+    }
+
+    #my-cal-inline-30min {
+      width: 100%;
+      min-height: 580px;
+    }
+
+
+    /* ════════════════════════════════════════════════
+       FOOTER
+    ════════════════════════════════════════════════ */
+    footer {
+      background: var(--dark-2);
+      padding: 52px 0 0;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 56px;
+      align-items: start;
+    }
+
+    .footer-brand { display: flex; flex-direction: column; gap: 14px; }
+    .footer-logo { display: flex; align-items: center; gap: 10px; }
+    .footer-logo svg { width: 26px; height: auto; }
+    .footer-logo-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    .footer-tagline {
+      font-size: 14px;
+      color: rgba(255,255,255,0.36);
+      line-height: 1.7;
+      max-width: 300px;
+    }
+
+    .footer-links { display: flex; flex-direction: column; gap: 12px; }
+
+    .footer-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: rgba(255,255,255,0.56);
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+    .footer-link:hover { color: #fff; }
+
+    .footer-icon {
+      width: 34px; height: 34px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .footer-link:hover .footer-icon { background: rgba(255,255,255,0.14); }
+    .footer-icon svg { width: 15px; height: 15px; fill: currentColor; }
+
+    .footer-bottom {
+      margin-top: 48px;
+      padding: 20px 0;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: rgba(255,255,255,0.2);
+    }
+
+
+    /* ════════════════════════════════════════════════
+       RESPONSIVE
+    ════════════════════════════════════════════════ */
+    @media (max-width: 960px) {
+      .step {
+        grid-template-columns: 1fr;
+        gap: 28px;
+        padding: 48px 0;
+      }
+      .step-num-wrap { flex-direction: row; align-items: center; gap: 14px; }
+      .step-big-num { font-size: 56px; }
+
+      .cred-inner { gap: 28px; }
+      .cred-points { gap: 16px; }
+    }
+
+    @media (max-width: 760px) {
+      .problem-box { padding: 40px 28px; }
+      .footer-grid { grid-template-columns: 1fr; gap: 40px; }
+      .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+
+      .t-media-landscape { width: 90%; }
+      .t-media-portrait  { width: 60%; }
+      .t-media-screenshot { width: 70%; }
+    }
+
+    @media (max-width: 580px) {
+      .hero { padding: 124px 0 72px; }
+      .container { padding: 0 18px; }
+      .problem-box { padding: 32px 18px; }
+
+      .cred-inner { flex-direction: column; align-items: flex-start; gap: 24px; }
+      .cred-divider { display: none; }
+      .cred-points { flex-direction: column; gap: 12px; }
+
+      .t-media-landscape { width: 100%; }
+      .t-media-portrait  { width: 72%; }
+      .t-media-screenshot { width: 82%; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ═══════════════════════════════════════
+       NAVBAR
+  ═══════════════════════════════════════ -->
+  <nav id="nav">
+    <div class="container">
+      <div class="nav-inner">
+        <a href="#" class="nav-logo">
+          <svg viewBox="0 0 214.17 287.44" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#700000" d="M8.17,160.29v-69.51L107.08,9.09l98.92,81.7v69.51H8.17ZM32.17,102.09v34.19h149.83v-34.19l-74.92-61.87-74.92,61.87Z"/>
+            <path fill="#700000" d="M13.77,183.72h186.64l-93.32,94.13L13.77,183.72ZM107.09,243.76l35.73-36.04h-71.45l35.73,36.04Z"/>
+          </svg>
+          <span class="nav-logo-name">FunnelHaus</span>
+        </a>
+
+        <a href="#cta" class="btn btn-primary">
+          Book a call
+          <span class="btn-arrow">
+            <svg viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M1.5 9.5L9.5 1.5M9.5 1.5H3.5M9.5 1.5V7.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+
+  <!-- ═══════════════════════════════════════
+       HERO
+  ═══════════════════════════════════════ -->
+  <section class="hero">
+    <div class="container">
+      <div class="fade" style="display:inline-block;margin-bottom:32px;">
+        <span class="hero-badge">
+          <span class="hero-badge-dot"></span>
+          Revenue growth partner for coaches and course creators making $15k+/month
+        </span>
+      </div>
+
+      <h1 class="fade fade-d1">
+        Turn Your Viewers<br>
+        Into High-Ticket Clients<br>
+        With The Storyselling Funnel
+      </h1>
+
+      <p class="hero-sub fade fade-d2">
+        You've already built the audience and made a product people want to buy. Our job is to handle the backend so you can focus on the content that got you here and get paid what you deserve.
+      </p>
+
+      <div class="hero-cta fade fade-d3">
+        <a href="#cta" class="btn btn-primary btn-lg">
+          Book a strategy call
+          <span class="btn-arrow">
+            <svg viewBox="0 0 11 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M1.5 9.5L9.5 1.5M9.5 1.5H3.5M9.5 1.5V7.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </a>
+      </div>
+
+      <p class="hero-note fade fade-d4">
+        Now taking projects for Q2 2026 &nbsp;·&nbsp; Get in touch today
+      </p>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════
+       CREDIBILITY STRIP
+  ═══════════════════════════════════════ -->
+  <div class="cred-strip">
+    <div class="container">
+      <div class="cred-inner fade">
+        <div class="cred-main">
+          <span class="cred-num">£1.5m+</span>
+          <span class="cred-divider"></span>
+          <div class="cred-context">
+            <span class="cred-context-top">Generated for our clients</span>
+            <span class="cred-context-sub">Through tailored marketing campaigns.</span>
+          </div>
+        </div>
+        <div class="cred-points">
+          <span class="cred-point"><span class="cred-dot"></span>Story-driven sales</span>
+          <span class="cred-point"><span class="cred-dot"></span>Performance-based partnership</span>
+          <span class="cred-point"><span class="cred-dot"></span>Limited quarterly intake</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════
+       PROBLEM SECTION
+  ═══════════════════════════════════════ -->
+  <section class="problem">
+    <div class="container">
+      <div class="problem-box fade">
+
+        <h2 class="problem-h">
+          If your audience is <em>watching</em><br>but not <em>buying</em>...
+        </h2>
+
+        <div class="prose">
+          <p>You might think the problem is your product. That it's not compelling enough. That it's priced too high. Or maybe that your audience simply isn't the right fit.</p>
+          <p>You start questioning whether people really want what you're offering, even though thousands of them follow your content and engage with what you share.</p>
+          <p>So you begin experimenting:</p>
+          <p>
+            &bull; A $47/month Skool community<br>
+            &bull; Running monthly webinars, hoping they'll sell at scale<br>
+            &bull; Churning out freebies to build your email list
+          </p>
+          <p>But nothing seems to get you where you want to be.</p>
+        </div>
+
+        <p class="problem-accent">...and usually, it comes down to one of three things:</p>
+
+        <ul class="numbered-list">
+          <li>
+            <span class="n-badge">1</span>
+            <span>An incomplete sales story that makes your audience feel emotionally disconnected.</span>
+          </li>
+          <li>
+            <span class="n-badge">2</span>
+            <span>Assets that skip the 3 essential warmup checkpoints before being asked to commit.</span>
+          </li>
+          <li>
+            <span class="n-badge">3</span>
+            <span>A conversion path that makes your prospects think instead of act.</span>
+          </li>
+        </ul>
+
+        <div class="prose">
+          <p>So if your sales process is missing just one of these, growth will always feel harder than it should.</p>
+          <p>The good news is that you don't need to fix it yourself.</p>
+        </div>
+
+        <p class="problem-cta-line">That's where <strong>Story-Driven Sales</strong> comes in</p>
+
+        <div class="prose" style="margin-top:18px;">
+          <p>You're creating content. People are engaging. Your audience is growing. But when it comes time to turn that attention into clients the results are inconsistent. Sales feel harder than they should and revenue doesn't reflect the level of interest you're generating.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════
+       RESULTS / TESTIMONIALS
+  ═══════════════════════════════════════ -->
+  <section class="results" id="results">
+    <div class="container">
+
+      <div class="section-head fade">
+        <span class="eyebrow">Client results</span>
+        <h2>Real results.<br>Real clients.</h2>
+        <p class="sub">Here's what happens when story-driven sales meets the right audience.</p>
+      </div>
+
+      <div class="t-list">
+
+        <!-- Louis Adkins -->
+        <div class="t-card fade fade-d1">
+          <div class="t-header">
+            <div class="t-client">
+              <img src="assets/louis profile.jpg" class="t-avatar" alt="Louis Adkins" />
+              <div>
+                <div class="t-name">Louis Adkins</div>
+                <div class="t-role">Business Growth Coach &middot; Helping financial advisers grow their client book &middot; UK</div>
+              </div>
+            </div>
+            <div class="t-result">
+              <div class="t-result-num">$20k</div>
+              <div class="t-result-label">Launched ads, first 30 days</div>
+            </div>
+          </div>
+          <div class="t-media-area">
+            <div class="t-media-landscape">
+              <video controls preload="metadata">
+                <source src="assets/Louis Adkins Video Testimonial.mp4" type="video/mp4">
+              </video>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kirk Francois -->
+        <div class="t-card fade fade-d2">
+          <div class="t-header">
+            <div class="t-client">
+              <img src="assets/kirk profile.jpg" class="t-avatar" alt="Kirk Francois" />
+              <div>
+                <div class="t-name">Kirk Francois</div>
+                <div class="t-role">Real Estate Coach &middot; Property investment in Mexico &middot; Canada</div>
+              </div>
+            </div>
+            <div class="t-result">
+              <div class="t-result-num" style="font-size:16px;color:var(--dark);font-weight:600;">Funnel Build</div>
+              <div class="t-result-label">Low ticket pipeline</div>
+            </div>
+          </div>
+          <div class="t-media-area">
+            <div class="t-media-portrait">
+              <video controls preload="metadata">
+                <source src="assets/Kirk Francois Video Testimonial.mp4" type="video/mp4">
+              </video>
+            </div>
+          </div>
+        </div>
+
+        <!-- Julian Baker -->
+        <div class="t-card fade fade-d3">
+          <div class="t-header">
+            <div class="t-client">
+              <img src="assets/julian profile.jpg" class="t-avatar" alt="Julian Baker" />
+              <div>
+                <div class="t-name">Julian Baker</div>
+                <div class="t-role">$0 to revenue in first 3 months, zero paid ads</div>
+              </div>
+            </div>
+            <div class="t-result">
+              <div class="t-result-num">$21k</div>
+              <div class="t-result-label">3 months, no ads</div>
+            </div>
+          </div>
+          <div class="t-media-area">
+            <div class="t-media-screenshot">
+              <img
+                src="assets/julian testimonial.png"
+                alt="Julian Baker message showing $21,000 generated in first 3 months with no paid ads"
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════
+       HOW IT WORKS
+  ═══════════════════════════════════════ -->
+  <section class="how" id="how-it-works">
+    <div class="container">
+
+      <div class="section-head fade">
+        <span class="eyebrow">How it works</span>
+        <h2>The 3 Ps To More<br>Infoproduct Sales</h2>
+      </div>
+
+      <div class="steps">
+
+        <!-- Step 01: Path -->
+        <div class="step fade">
+          <div class="step-num-wrap">
+            <span class="step-ordinal">Step 01</span>
+            <span class="step-big-num">01</span>
+          </div>
+          <div class="step-content">
+            <h3 class="step-title">Path</h3>
+            <p class="step-body">With so many options to convert interest into clients, the wrong decision can limit your growth. We use the Path Phase to select the best conversion mechanism for your product and audience.</p>
+            <div class="pill-row">
+              <span class="pill">Low-Ticket</span>
+              <span class="pill">Challenge</span>
+              <span class="pill">Live Event</span>
+              <span class="pill">VSL</span>
+              <span class="pill">Training</span>
+            </div>
+          </div>
+          <div class="step-img">
+            <img src="assets/Path.png" alt="Path framework" loading="lazy" />
+          </div>
+        </div>
+
+        <!-- Step 02: Positioning -->
+        <div class="step fade">
+          <div class="step-num-wrap">
+            <span class="step-ordinal">Step 02</span>
+            <span class="step-big-num">02</span>
+          </div>
+          <div class="step-content">
+            <h3 class="step-title">Positioning</h3>
+            <p class="step-body">This is where we create the story-driven sales asset around your conversion mechanism. By positioning your story in the right way, you'll sell without being salesy.</p>
+          </div>
+          <div class="step-img">
+            <img src="assets/Positioning.png" alt="Positioning framework" loading="lazy" />
+          </div>
+        </div>
+
+        <!-- Step 03: Performance -->
+        <div class="step fade">
+          <div class="step-num-wrap">
+            <span class="step-ordinal">Step 03</span>
+            <span class="step-big-num">03</span>
+          </div>
+          <div class="step-content">
+            <h3 class="step-title">Performance</h3>
+            <p class="step-body">We systemise the entire process so it runs consistently. Automation, follow-up, upsells, and sales execution are aligned to maximise conversion and revenue.</p>
+            <div class="pill-row">
+              <span class="pill">Automation</span>
+              <span class="pill">Management</span>
+              <span class="pill">Scripting</span>
+              <span class="pill">Optimisation</span>
+              <span class="pill">Production</span>
+            </div>
+          </div>
+          <div class="step-img">
+            <img src="assets/Performance.png" alt="Performance framework" loading="lazy" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════
+       BOOKING / CTA
+  ═══════════════════════════════════════ -->
+  <section class="booking" id="cta">
+    <div class="container">
+
+      <div class="fade"><span class="eyebrow">Let's start a project</span></div>
+      <h2 class="fade fade-d1">Book Your Funnel<br>Strategy Call</h2>
+      <p class="booking-sub fade fade-d2">
+        We take on a limited number of clients each quarter. Tell us about your business and we'll map out exactly how we'd grow it.
+      </p>
+
+      <div class="cal-wrap fade fade-d3">
+        <!-- Cal inline embed code begins -->
+        <div style="width:100%;height:100%;overflow:scroll" id="my-cal-inline-30min"></div>
+        <script type="text/javascript">
+          (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if(typeof namespace === "string"){cal.ns[namespace] = cal.ns[namespace] || api;p(cal.ns[namespace], ar);p(cal, ["initNamespace", namespace]);} else p(cal, ar); return;} p(cal, ar); }; })(window, "https://app.cal.com/embed/embed.js", "init");
+          Cal("init", "30min", {origin:"https://app.cal.com"});
+          Cal.ns["30min"]("inline", {
+            elementOrSelector:"#my-cal-inline-30min",
+            config: {"layout":"month_view","useSlotsViewOnSmallScreen":"true"},
+            calLink: "lewiskirby/30min",
+          });
+          Cal.ns["30min"]("ui", {"hideEventTypeDetails":false,"layout":"month_view"});
+        </script>
+        <!-- Cal inline embed code ends -->
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════
+       FOOTER
+  ═══════════════════════════════════════ -->
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+
+        <div class="footer-brand">
+          <a href="#" class="footer-logo">
+            <svg viewBox="0 0 214.17 287.44" xmlns="http://www.w3.org/2000/svg">
+              <path fill="#700000" d="M8.17,160.29v-69.51L107.08,9.09l98.92,81.7v69.51H8.17ZM32.17,102.09v34.19h149.83v-34.19l-74.92-61.87-74.92,61.87Z"/>
+              <path fill="#700000" d="M13.77,183.72h186.64l-93.32,94.13L13.77,183.72ZM107.09,243.76l35.73-36.04h-71.45l35.73,36.04Z"/>
+            </svg>
+            <span class="footer-logo-name">FunnelHaus</span>
+          </a>
+          <p class="footer-tagline">Revenue growth partner for coaches and course creators making $15k+/month.</p>
+        </div>
+
+        <div class="footer-links">
+          <a href="https://wa.me/447471734610" target="_blank" rel="noopener" class="footer-link">
+            <span class="footer-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.47c.15 0 .36-.06.55.45l.69 1.87c.06.13.1.28.01.44l-.27.41-.39.42c-.12.12-.26.25-.12.5.12.26.62 1.09 1.32 1.78.91.88 1.71 1.17 1.95 1.3.24.14.39.12.54-.04l.81-.94c.19-.25.35-.19.58-.11l1.67.88M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10c-1.97 0-3.8-.57-5.35-1.55L2 22l1.55-4.65A9.969 9.969 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8c0 1.72.54 3.31 1.46 4.61L4.5 19.5l2.89-.96A7.95 7.95 0 0 0 12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z"/>
+              </svg>
+            </span>
+            +44 7471 734610
+          </a>
+          <a href="mailto:info@overdot.co.uk" target="_blank" rel="noopener" class="footer-link">
+            <span class="footer-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+              </svg>
+            </span>
+            info@overdot.co.uk
+          </a>
+          <a href="https://maps.app.goo.gl/8tjp7ABVMya1dBEE8" target="_blank" rel="noopener" class="footer-link">
+            <span class="footer-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C8.14 2 5 5.14 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.86-3.14-7-7-7zm4 8h-3v3h-2v-3H8V8h3V5h2v3h3v2z"/>
+              </svg>
+            </span>
+            86-90 Paul Street, London, England
+          </a>
+        </div>
+
+      </div>
+
+      <div class="footer-bottom">
+        <span>© 2026 FunnelHaus. All rights reserved.</span>
+        <span>Funnel Building Agency For Infoproduct Creators</span>
+      </div>
+    </div>
+  </footer>
+
+
+  <!-- ═══════════════════════════════════════
+       SCRIPTS
+  ═══════════════════════════════════════ -->
+  <script>
+    // Scroll reveal via IntersectionObserver (skip hero, which uses CSS animation)
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(({ target, isIntersecting }) => {
+          if (isIntersecting) {
+            target.classList.add('in');
+            observer.unobserve(target);
+          }
+        });
+      },
+      { threshold: 0.07, rootMargin: '0px 0px -28px 0px' }
+    );
+
+    document.querySelectorAll('.fade').forEach(el => {
+      if (!el.closest('.hero')) observer.observe(el);
+    });
+
+    // Navbar scroll shadow
+    const nav = document.getElementById('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 24);
+    }, { passive: true });
+  </script>
+
+</body>
+</html>
