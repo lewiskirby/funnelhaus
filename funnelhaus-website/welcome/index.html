@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome | FunnelHaus</title>
+  <meta name="description" content="Welcome to FunnelHaus. Complete your onboarding form so we can start mapping out your funnel." />
+  <meta name="robots" content="noindex" />
+
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ─── Design tokens ─────────────────────────────── */
+    :root {
+      --red:        #700000;
+      --red-dark:   #580000;
+      --red-faint:  rgba(112,0,0,0.07);
+      --dark:       #111111;
+      --dark-2:     #1c1c1c;
+      --text:       #242424;
+      --muted:      #6a6a6a;
+      --light:      #b0b0b0;
+      --border:     rgba(0,0,0,0.08);
+      --cream:      #fffefa;
+      --white:      #ffffff;
+      --off-white:  #f4f2ec;
+      --r:          12px;
+      --r-lg:       20px;
+      --r-xl:       28px;
+    }
+
+    /* ─── Reset ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--cream);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    img, video { max-width: 100%; display: block; }
+    a { text-decoration: none; color: inherit; }
+
+    .container {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 28px;
+    }
+
+    /* ─── Scroll reveal ──────────────────────────────── */
+    .fade {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+    .fade.in { opacity: 1; transform: none; }
+
+    /* ════════════════════════════════════════════════
+       WELCOME HERO
+    ════════════════════════════════════════════════ */
+    .welcome-hero {
+      padding: 72px 0 40px;
+      text-align: center;
+    }
+    .welcome-hero h1 {
+      font-size: clamp(32px, 4.6vw, 54px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.08;
+      color: var(--dark);
+      max-width: 760px;
+      margin: 0 auto 18px;
+    }
+    .welcome-hero p {
+      font-size: clamp(15px, 1.6vw, 18px);
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ════════════════════════════════════════════════
+       FORM EMBED
+    ════════════════════════════════════════════════ */
+    .form-section { padding: 24px 0 100px; }
+
+    .form-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.06);
+    }
+
+    .form-card iframe {
+      display: block;
+      width: 100%;
+      height: 1000px;
+      border: none;
+    }
+
+    .form-fallback {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .form-fallback a {
+      color: var(--red);
+      font-weight: 600;
+      text-decoration: underline;
+      text-decoration-color: var(--red-faint);
+    }
+
+    @media (max-width: 720px) {
+      .form-card iframe { height: 1300px; }
+    }
+
+    /* ════════════════════════════════════════════════
+       FOOTER
+    ════════════════════════════════════════════════ */
+    footer {
+      background: var(--dark-2);
+      padding: 52px 0 0;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 56px;
+      align-items: start;
+    }
+    .footer-brand { display: flex; flex-direction: column; gap: 14px; }
+    .footer-logo { display: flex; align-items: center; gap: 10px; }
+    .footer-logo svg { width: 26px; height: auto; }
+    .footer-logo-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    .footer-tagline {
+      font-size: 14px;
+      color: rgba(255,255,255,0.36);
+      line-height: 1.7;
+      max-width: 300px;
+    }
+    .footer-links { display: flex; flex-direction: column; gap: 12px; }
+    .footer-link {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: rgba(255,255,255,0.56);
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+    .footer-link:hover { color: #fff; }
+    .footer-icon {
+      width: 34px; height: 34px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    .footer-link:hover .footer-icon { background: rgba(255,255,255,0.14); }
+    .footer-icon svg { width: 15px; height: 15px; fill: currentColor; }
+    .footer-bottom {
+      margin-top: 48px;
+      padding: 20px 0;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: rgba(255,255,255,0.32);
+    }
+
+    @media (max-width: 720px) {
+      .footer-grid { grid-template-columns: 1fr; gap: 40px; }
+      .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <section class="welcome-hero">
+    <div class="container">
+      <h1 class="fade in">Welcome! Fill In The Form To Get Started</h1>
+      <p class="fade in">Please take the time to share as much detail as you can. This will enable us to get our partnership off to a smooth start.</p>
+    </div>
+  </section>
+
+  <section class="form-section">
+    <div class="container">
+      <div class="form-card fade in">
+        <iframe
+          src="https://lewisdkkirby.notion.site/ebd/3d004bbfdb0080b5a61ada7ff3aea9c8"
+          title="FunnelHaus Onboarding Form"
+          allowfullscreen
+        ></iframe>
+      </div>
+      <p class="form-fallback">
+        Having trouble viewing the form?
+        <a href="https://lewisdkkirby.notion.site/3d004bbfdb0080b5a61ada7ff3aea9c8" target="_blank" rel="noopener">Open it in a new tab</a>
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+
+        <div class="footer-brand">
+          <a href="/" class="footer-logo">
+            <svg viewBox="0 0 214.17 287.44" xmlns="http://www.w3.org/2000/svg">
+              <path fill="#700000" d="M8.17,160.29v-69.51L107.08,9.09l98.92,81.7v69.51H8.17ZM32.17,102.09v34.19h149.83v-34.19l-74.92-61.87-74.92,61.87Z"/>
+              <path fill="#700000" d="M13.77,183.72h186.64l-93.32,94.13L13.77,183.72ZM107.09,243.76l35.73-36.04h-71.45l35.73,36.04Z"/>
+            </svg>
+            <span class="footer-logo-name">FunnelHaus</span>
+          </a>
+          <p class="footer-tagline">Revenue growth partner for coaches and course creators making $15k+/month.</p>
+        </div>
+
+        <div class="footer-links">
+          <a href="https://wa.me/447471734610" target="_blank" rel="noopener" class="footer-link">
+            <span class="footer-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16.75 13.96c.25.13.41.2.46.3.06.11.04.61-.21 1.18-.2.56-1.24 1.1-1.7 1.12-.46.02-.47.36-2.96-.73-2.49-1.09-3.99-3.75-4.11-3.92-.12-.17-.96-1.38-.92-2.61.05-1.22.69-1.8.95-2.04.24-.26.51-.29.68-.26h.47c.15 0 .36-.06.55.45l.69 1.87c.06.13.1.28.01.44l-.27.41-.39.42c-.12.12-.26.25-.12.5.12.26.62 1.09 1.32 1.78.91.88 1.71 1.17 1.95 1.3.24.14.39.12.54-.04l.81-.94c.19-.25.35-.19.58-.11l1.67.88M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10c-1.97 0-3.8-.57-5.35-1.55L2 22l1.55-4.65A9.969 9.969 0 0 1 2 12 10 10 0 0 1 12 2m0 2a8 8 0 0 0-8 8c0 1.72.54 3.31 1.46 4.61L4.5 19.5l2.89-.96A7.95 7.95 0 0 0 12 20a8 8 0 0 0 8-8 8 8 0 0 0-8-8z"/>
+              </svg>
+            </span>
+            +44 7471 734610
+          </a>
+          <a href="mailto:info@overdot.co.uk" target="_blank" rel="noopener" class="footer-link">
+            <span class="footer-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+              </svg>
+            </span>
+            info@overdot.co.uk
+          </a>
+          <a href="https://maps.app.goo.gl/8tjp7ABVMya1dBEE8" target="_blank" rel="noopener" class="footer-link">
+            <span class="footer-icon">
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C8.14 2 5 5.14 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.86-3.14-7-7-7zm4 8h-3v3h-2v-3H8V8h3V5h2v3h3v2z"/>
+              </svg>
+            </span>
+            86-90 Paul Street, London, England
+          </a>
+        </div>
+
+      </div>
+
+      <div class="footer-bottom">
+        <span>© 2026 FunnelHaus. All rights reserved.</span>
+        <span>Funnel Building Agency For Infoproduct Creators</span>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
