@@ -31,6 +31,18 @@ function TaskRow({ task }: { task: Task }) {
   );
 }
 
+// "Priority Group 1" → "Priority 1"; tasks without one go last under "Other".
+function priorityGroups(tasks: Task[]) {
+  const groups = new Map<string, Task[]>();
+  for (const t of tasks) {
+    const key = t.priority ?? "";
+    groups.set(key, [...(groups.get(key) ?? []), t]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b, undefined, { numeric: true })))
+    .map(([key, items]) => ({ label: key ? key.replace(/^Priority Group/i, "Priority") : "Other", items }));
+}
+
 export default async function TasksPage() {
   const client = await requireClient();
   const tasks = await getClientTasks(client.id);
@@ -81,11 +93,18 @@ export default async function TasksPage() {
             {tasks.length ? "All done here. We'll add new tasks as the project moves forward." : "No tasks yet — we'll add them here."}
           </div>
         ) : (
-          <ul className="card divide-y divide-line overflow-hidden">
-            {todo.map((t) => (
-              <TaskRow key={t.id} task={t} />
+          <div className="space-y-6">
+            {priorityGroups(todo).map((group) => (
+              <div key={group.label}>
+                <h3 className="mb-2 px-1 text-[13px] font-medium text-ink">{group.label}</h3>
+                <ul className="card divide-y divide-line overflow-hidden">
+                  {group.items.map((t) => (
+                    <TaskRow key={t.id} task={t} />
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 

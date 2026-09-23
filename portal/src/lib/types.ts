@@ -26,6 +26,7 @@ export interface Task {
   status: TaskStatus;
   icon?: string; // the task page's emoji
   clientResponse?: string;
+  priority?: string; // Priority Group, e.g. "Priority Group 1"
 }
 
 export interface TaskRecord extends Task {

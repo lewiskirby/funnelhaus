@@ -90,6 +90,9 @@ function toIcon(icon?: PageIcon | null): ClientIcon | undefined {
   return url ? { type: "image", url } : undefined;
 }
 
+const IN_PROGRESS = ["Onboarding", "Active"];
+export const isInProgress = (client: Client) => IN_PROGRESS.includes(client.rawStatus ?? "");
+
 function toClient(page: Page): Client {
   const p = page.properties;
   const status = option(p["Status"]);
@@ -103,8 +106,9 @@ function toClient(page: Page): Client {
     contactEmails: p["Email"]?.email ? [p["Email"].email] : [],
     status: status === "Onboarding" || status === "Inactive" ? status : "Active",
     rawStatus: status,
-    // Portal access requires a password in "Login access" and a non-inactive status.
-    portalEnabled: Boolean(text(p["Login access"])) && status !== "Inactive",
+    // Portal access requires a password in "Login access" and a Status in Notion's
+    // "In progress" group (Onboarding or Active). No Status and Inactive are locked out.
+    portalEnabled: Boolean(text(p["Login access"])) && IN_PROGRESS.includes(status),
   };
 }
 
@@ -131,10 +135,17 @@ export async function setClientStatusInNotion(clientId: string, status: "Active"
   await notion(`/pages/${clientId}`, { method: "PATCH", body: { properties: { Status: { status: { name: status } } } } });
 }
 
-/** Every client record, A–Z, for the admin switcher. */
+let clientListCache: { at: number; clients: Promise<Client[]> } | undefined;
+
+/** In-progress clients (Onboarding or Active), A–Z, for the admin switcher. Kept for a minute so switching is quick. */
 export async function listClients(): Promise<Client[]> {
-  const pages = await queryAll(CLIENTS_DS, { sorts: [{ property: "Business name", direction: "ascending" }] });
-  return pages.filter((p) => text(p.properties["Business name"])).map(toClient);
+  if (clientListCache && Date.now() - clientListCache.at < CONTENT_TTL_MS) return clientListCache.clients;
+  const clients = queryAll(CLIENTS_DS, { sorts: [{ property: "Business name", direction: "ascending" }] }).then((pages) =>
+    pages.filter((p) => text(p.properties["Business name"])).map(toClient).filter(isInProgress),
+  );
+  clientListCache = { at: Date.now(), clients };
+  clients.catch(() => (clientListCache = undefined));
+  return clients;
 }
 
 export const getClientPage = cache(async (clientId: string): Promise<Client | null> => {
@@ -164,6 +175,7 @@ function toTask(page: Page): TaskRecord {
     status: STATUSES.includes(status) ? status : "Not Started",
     icon: page.icon?.type === "emoji" ? page.icon.emoji : undefined,
     clientResponse: text(p["Client Response"]) || undefined,
+    priority: option(p["Priority Group"]) || undefined,
     templateId: p["Template"]?.relation?.[0]?.id,
   };
 }

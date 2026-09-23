@@ -69,9 +69,10 @@ export function verifyAdminLogin(email: string, password: string): boolean {
   return isAdminEmail(email) && isHashed(stored) && verifyPassword(password, stored);
 }
 
-/** Any client record, whether or not it has portal access. Admin only. */
+/** Any in-progress client (Onboarding or Active), with or without a password. Admin only. */
 export async function getClientForAdmin(clientId: string): Promise<Client | null> {
-  return notion.getClientPage(clientId);
+  const client = await notion.getClientPage(clientId);
+  return client && notion.isInProgress(client) ? client : null;
 }
 
 export const listClientsForAdmin = cache(async (): Promise<Pick<Client, "id" | "name" | "icon" | "status">[]> => {
