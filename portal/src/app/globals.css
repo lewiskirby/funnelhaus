@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* FunnelHaus brand tokens — same palette as funnelhaus.co */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand: #700000;
+  --color-brand-dark: #580000;
+  --color-brand-soft: #f6ecea;
+  --color-ink: #111111;
+  --color-ink-2: #1c1c1c;
+  --color-body: #2b2b2b;
+  --color-muted: #6f6f6b;
+  --color-faint: #a3a39e;
+  --color-line: #ecebe6;
+  --color-canvas: #faf9f5;
+  --color-card: #ffffff;
+  --color-success: #1f7a4d;
+  --color-success-soft: #e8f3ec;
+  --color-warn: #9a5b00;
+  --color-warn-soft: #fbf1e1;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-body);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--color-brand);
+  color: #fff;
+}
+
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

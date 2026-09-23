@@ -1,0 +1,66 @@
+// Shapes of the records the portal reads from Notion.
+// Each type mirrors one of the master databases in the portal brief.
+
+export type TaskStatus = "Not Started" | "In Progress" | "Complete";
+
+export type ClientIcon = { type: "emoji"; value: string } | { type: "image"; url: string };
+
+export interface Client {
+  id: string;
+  name: string;
+  icon?: ClientIcon;
+  contactFirstName: string;
+  contactEmails: string[];
+  status: "Onboarding" | "Active" | "Inactive";
+  rawStatus?: string; // the exact Notion Status, e.g. "No Status"
+  portalEnabled: boolean;
+  // Folder links shown in the Resources card.
+  driveFolderUrl?: string; // Client Database → "Google Drive Folder"
+  assetFolderUrl?: string; // Client Database → "Asset upload folder"
+}
+
+// A task from the Client Tasks database. Only these fields are read; SOP stays in Notion.
+export interface Task {
+  id: string;
+  name: string;
+  status: TaskStatus;
+  icon?: string; // the task page's emoji
+  clientResponse?: string;
+}
+
+export interface TaskRecord extends Task {
+  clientId: string;
+}
+
+// An entry in the Client Events database (webinars, calls, launches…).
+export interface ClientEvent {
+  id: string;
+  name: string;
+  start: string; // ISO date, or date-time with offset
+  end?: string;
+  allDay: boolean;
+}
+
+// Page content from Notion, reduced to what the portal renders.
+export interface RichText {
+  text: string;
+  href?: string;
+  bold?: boolean;
+  italic?: boolean;
+  strikethrough?: boolean;
+  underline?: boolean;
+  code?: boolean;
+}
+
+export type ContentBlock =
+  | {
+      type: "paragraph" | "heading_1" | "heading_2" | "heading_3" | "quote" | "bulleted_list_item" | "numbered_list_item" | "toggle";
+      text: RichText[];
+      children?: ContentBlock[];
+    }
+  | { type: "to_do"; text: RichText[]; checked: boolean; children?: ContentBlock[] }
+  | { type: "callout"; text: RichText[]; icon?: string; children?: ContentBlock[] }
+  | { type: "code"; text: RichText[]; language?: string }
+  | { type: "divider" }
+  | { type: "image"; url: string; caption: RichText[] }
+  | { type: "media"; url: string; caption: RichText[] };
