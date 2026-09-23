@@ -27,6 +27,11 @@ body {
   color: var(--color-body);
 }
 
+/* Keep the page still behind an open modal. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
