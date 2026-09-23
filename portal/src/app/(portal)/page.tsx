@@ -39,9 +39,9 @@ export default async function HomePage() {
 
       {/* Progress */}
       {open.length > 0 && (
-        <section className="relative overflow-hidden rounded-[24px] bg-ink-2 p-7 text-white sm:p-9">
+        <section className="relative isolate overflow-hidden rounded-[24px] bg-ink-2 p-7 text-white [clip-path:inset(0_round_24px)] sm:p-9">
           <div className="pointer-events-none absolute -top-32 -right-24 size-[380px] rounded-full bg-brand/45 blur-[110px]" />
-          <div className="relative grid gap-8 lg:grid-cols-[1fr_minmax(0,380px)] lg:items-center">
+          <div className="relative grid grid-cols-1 gap-8 lg:grid-cols-[1fr_minmax(0,380px)] lg:items-center">
             <div>
               <p className="mb-3 text-[12px] font-semibold text-white/45">Onboarding progress</p>
               <p className="text-[40px] leading-none font-bold tracking-[-0.03em]">
@@ -73,7 +73,7 @@ export default async function HomePage() {
       )}
 
       {/* Tasks + focus */}
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <section className="card p-6 lg:col-span-3">
           <SectionHeading
             title={open.length ? `${open.length} ${open.length === 1 ? "task needs" : "tasks need"} your attention` : "Your tasks"}
@@ -142,7 +142,7 @@ export default async function HomePage() {
       </div>
 
       {/* This week + coming up */}
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <section className="card p-6 lg:col-span-3">
           <SectionHeading title="What we're working on this week" />
           {work.length === 0 ? (

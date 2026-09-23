@@ -25,7 +25,7 @@ export default async function ResultsPage() {
         <p className="mt-2 text-[15px] text-muted">Your campaign results, updated as they come in.</p>
       </header>
 
-      <section className="relative overflow-hidden rounded-[28px] border border-line bg-white">
+      <section className="relative isolate overflow-hidden rounded-[28px] border border-line bg-white [clip-path:inset(0_round_28px)]">
         {/* Blurred preview of the future dashboard */}
         <div aria-hidden="true" className="pointer-events-none grid grid-cols-2 gap-4 p-6 opacity-60 blur-[6px] select-none sm:p-8 lg:grid-cols-4">
           {PREVIEW_KPIS.map((kpi, i) => (
