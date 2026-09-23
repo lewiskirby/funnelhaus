@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NotionContent } from "@/components/notion-content";
-import { Icon, StatusBadge } from "@/components/ui";
+import { TaskHeader } from "@/components/task-status";
+import { Icon } from "@/components/ui";
 import { RESPONSE_MAX, getClientTask, getClientTaskContent } from "@/lib/data";
 import { requireClient } from "@/lib/session";
 import { ResponseForm } from "./response-form";
-import { StatusButtons } from "./status-buttons";
 
 export async function generateMetadata({ params }: PageProps<"/tasks/[id]">): Promise<Metadata> {
   const client = await requireClient();
@@ -28,13 +28,7 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
       </Link>
 
       <article className="card overflow-hidden">
-        <header className="border-b border-line p-7 sm:p-10">
-          {task.icon && <p className="mb-4 text-[40px] leading-none">{task.icon}</p>}
-          <h1 className="text-[30px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[36px]">{task.name}</h1>
-          <div className="mt-4">
-            <StatusBadge status={task.status} />
-          </div>
-        </header>
+        <TaskHeader taskId={task.id} status={task.status} name={task.name} icon={task.icon} />
 
         {content.length > 0 && (
           <div className="p-7 sm:p-10">
@@ -42,12 +36,8 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
           </div>
         )}
 
-        <div className="space-y-8 border-t border-line bg-canvas/60 p-7 sm:p-10">
+        <div className="border-t border-line bg-canvas/60 p-7 sm:p-10">
           <ResponseForm key={task.clientResponse ?? ""} taskId={task.id} initial={task.clientResponse} max={RESPONSE_MAX} />
-          <div>
-            <p className="mb-4 text-[13px] font-semibold text-muted">Update status</p>
-            <StatusButtons taskId={task.id} status={task.status} />
-          </div>
         </div>
       </article>
     </div>

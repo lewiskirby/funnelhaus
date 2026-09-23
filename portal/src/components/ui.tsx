@@ -97,36 +97,23 @@ export const Icon = {
 
 // ── Status ───────────────────────────────────────────
 
-export function StatusDot({ status, className = "" }: { status: TaskStatus; className?: string }) {
+export function StatusDot({ status, size = "sm", className = "" }: { status: TaskStatus; size?: "sm" | "lg"; className?: string }) {
+  const box = size === "lg" ? "size-8" : "size-5";
   if (status === "Complete") {
     return (
-      <span className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-brand text-white ${className}`}>
-        <Icon.check className="size-3.5" strokeWidth={2.2} />
+      <span className={`inline-flex ${box} shrink-0 items-center justify-center rounded-full bg-brand text-white ${className}`}>
+        <Icon.check className={size === "lg" ? "size-5" : "size-3.5"} strokeWidth={2.2} />
       </span>
     );
   }
   if (status === "In Progress") {
     return (
-      <span className={`relative inline-flex size-5 shrink-0 rounded-full border-[1.6px] border-brand ${className}`}>
-        <span className="absolute inset-[3px] rounded-full bg-brand [clip-path:inset(0_50%_0_0)]" />
+      <span className={`relative inline-flex ${box} shrink-0 rounded-full border-[1.6px] border-brand ${className}`}>
+        <span className={`absolute rounded-full bg-brand [clip-path:inset(0_50%_0_0)] ${size === "lg" ? "inset-[5px]" : "inset-[3px]"}`} />
       </span>
     );
   }
-  return <span className={`inline-flex size-5 shrink-0 rounded-full border-[1.6px] border-faint ${className}`} />;
-}
-
-const statusStyles: Record<TaskStatus, string> = {
-  "Not Started": "bg-canvas text-muted ring-line",
-  "In Progress": "bg-warn-soft text-warn ring-warn/15",
-  Complete: "bg-success-soft text-success ring-success/15",
-};
-
-export function StatusBadge({ status }: { status: TaskStatus }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${statusStyles[status]}`}>
-      {status}
-    </span>
-  );
+  return <span className={`inline-flex ${box} shrink-0 rounded-full border-[1.6px] border-faint ${className}`} />;
 }
 
 // ── Layout helpers ───────────────────────────────────

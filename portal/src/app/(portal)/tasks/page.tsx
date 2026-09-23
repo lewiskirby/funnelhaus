@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Icon, StatusDot } from "@/components/ui";
+import { StatusToggle } from "@/components/task-status";
+import { Icon } from "@/components/ui";
 import { getClientTasks } from "@/lib/data";
 import { requireClient } from "@/lib/session";
 import type { Task } from "@/lib/types";
@@ -10,9 +11,9 @@ export const metadata: Metadata = { title: "Tasks" };
 function TaskRow({ task }: { task: Task }) {
   const done = task.status === "Complete";
   return (
-    <li>
-      <Link href={`/tasks/${task.id}`} className="group flex items-center gap-4 px-5 py-4 transition hover:bg-canvas sm:px-6">
-        <StatusDot status={task.status} />
+    <li className="group flex items-center gap-4 px-5 transition hover:bg-canvas sm:px-6">
+      <StatusToggle taskId={task.id} status={task.status} name={task.name} />
+      <Link href={`/tasks/${task.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-4">
         <div className="min-w-0 flex-1">
           <p className={`truncate text-[15px] font-medium ${done ? "text-muted line-through decoration-faint/60" : "text-ink"}`}>
             {task.icon && <span className="mr-2 no-underline">{task.icon}</span>}

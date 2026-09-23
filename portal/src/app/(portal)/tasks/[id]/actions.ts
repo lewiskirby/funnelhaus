@@ -10,12 +10,13 @@ export type ActionState = { error?: string; saved?: boolean } | undefined;
 // The client comes from the signed session, never the form. Ownership is
 // checked again in the data layer before anything is written to Notion.
 
-export async function setTaskStatus(_prev: ActionState, formData: FormData): Promise<ActionState> {
+/** Used by the status circles in task lists and on the task page. */
+export async function changeTaskStatus(taskId: string, status: TaskStatus): Promise<{ error?: string }> {
   const client = await requireClient();
-  const result = await updateTaskStatus(client.id, String(formData.get("taskId") ?? ""), String(formData.get("status") ?? "") as TaskStatus);
+  const result = await updateTaskStatus(client.id, taskId, status);
   if (!result.ok) return { error: result.error };
   revalidatePath("/", "layout");
-  return undefined;
+  return {};
 }
 
 export async function setTaskResponse(_prev: ActionState, formData: FormData): Promise<ActionState> {

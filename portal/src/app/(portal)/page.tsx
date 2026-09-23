@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { AddEvent } from "@/components/add-event";
 import { EventRow } from "@/components/event-row";
-import { Icon, ProgressBar, SectionHeading, StatusDot } from "@/components/ui";
+import { StatusToggle } from "@/components/task-status";
+import { Icon, ProgressBar, SectionHeading } from "@/components/ui";
 import { EVENT_NAME_MAX, getClientEvents, getClientTasks, getUpcomingWork } from "@/lib/data";
 import { requireClient } from "@/lib/session";
 
@@ -91,9 +92,9 @@ export default async function HomePage() {
           ) : (
             <ul className="-mx-2">
               {shown.map((task) => (
-                <li key={task.id}>
-                  <Link href={`/tasks/${task.id}`} className="group flex items-center gap-4 rounded-xl px-2 py-3 transition hover:bg-canvas">
-                    <StatusDot status={task.status} />
+                <li key={task.id} className="group flex items-center gap-4 rounded-xl px-2 transition hover:bg-canvas">
+                  <StatusToggle taskId={task.id} status={task.status} name={task.name} />
+                  <Link href={`/tasks/${task.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-3">
                     <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
                       {task.icon && <span className="mr-2">{task.icon}</span>}
                       {task.name}
