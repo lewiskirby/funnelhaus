@@ -11,6 +11,7 @@ const VERSION = "2025-09-03";
 export const CLIENTS_DS = process.env.NOTION_CLIENTS_DS ?? "3b904bbf-db00-8005-95df-000b8d13711a";
 export const TASKS_DS = process.env.NOTION_TASKS_DS ?? "3e404bbf-db00-804b-9f7d-000bd5b01c9e";
 export const EVENTS_DS = process.env.NOTION_EVENTS_DS ?? "3e404bbf-db00-8058-8f62-000bc97aa059";
+const CONTENT_TTL_MS = 60_000; // how long page content and template icons are cached
 export const TRACKER_DS = process.env.NOTION_TRACKER_DS ?? "3c104bbf-db00-802e-b3e3-000bba4c7e16";
 
 // ── HTTP ────────────────────────────────────────────
@@ -163,16 +164,40 @@ function toTask(page: Page): TaskRecord {
     status: STATUSES.includes(status) ? status : "Not Started",
     icon: page.icon?.type === "emoji" ? page.icon.emoji : undefined,
     clientResponse: text(p["Client Response"]) || undefined,
+    templateId: p["Template"]?.relation?.[0]?.id,
   };
 }
 
-/** This client's tasks, oldest first — filtered by Notion itself. */
+// Template pages change rarely; keep their emoji for a minute.
+const templateIconCache = new Map<string, { at: number; icon: Promise<string | undefined> }>();
+
+async function templateIcon(templateId: string): Promise<string | undefined> {
+  const hit = templateIconCache.get(templateId);
+  if (hit && Date.now() - hit.at < CONTENT_TTL_MS) return hit.icon;
+  const icon = notion<Page>(`/pages/${templateId}`)
+    .then((page) => (page.icon?.type === "emoji" ? page.icon.emoji : undefined))
+    .catch(() => undefined);
+  templateIconCache.set(templateId, { at: Date.now(), icon });
+  return icon;
+}
+
+/** Tasks without their own emoji borrow their template's. */
+async function withTemplateIcons(tasks: TaskRecord[]): Promise<TaskRecord[]> {
+  return Promise.all(
+    tasks.map(async (t) => (t.icon || !t.templateId ? t : { ...t, icon: await templateIcon(t.templateId) })),
+  );
+}
+
+/** This client's tasks by Priority Group, then oldest first — filtered by Notion itself. */
 export async function queryClientTasks(clientId: string): Promise<TaskRecord[]> {
   const pages = await queryAll(TASKS_DS, {
     filter: { property: "Client", relation: { contains: clientId } },
-    sorts: [{ timestamp: "created_time", direction: "ascending" }],
+    sorts: [
+      { property: "Priority Group", direction: "ascending" },
+      { timestamp: "created_time", direction: "ascending" },
+    ],
   });
-  return pages.map(toTask);
+  return withTemplateIcons(pages.map(toTask));
 }
 
 /** A single task page, but only if it really lives in the Client Tasks database. */
@@ -182,7 +207,8 @@ export const getTaskPage = cache(async (taskId: string): Promise<TaskRecord | nu
     if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(TASKS_DS)) return null;
     // A task linked to several clients must not be shared across them.
     if ((page.properties["Client"]?.relation?.length ?? 0) !== 1) return null;
-    return toTask(page);
+    const [task] = await withTemplateIcons([toTask(page)]);
+    return task;
   } catch {
     return null;
   }
@@ -386,7 +412,6 @@ async function toContent(blocks: Block[], depth: number): Promise<ContentBlock[]
 
 // Page bodies change rarely, so keep them for a minute. Notion's signed image
 // links last an hour, so a short cache never serves an expired image.
-const CONTENT_TTL_MS = 60_000;
 const contentCache = new Map<string, { at: number; blocks: Promise<ContentBlock[]> }>();
 
 /** The body of a Notion page as portal content blocks. */

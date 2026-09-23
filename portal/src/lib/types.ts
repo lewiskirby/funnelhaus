@@ -30,6 +30,7 @@ export interface Task {
 
 export interface TaskRecord extends Task {
   clientId: string;
+  templateId?: string; // Task Templates page this task was created from
 }
 
 // An entry in the Client Events database (webinars, calls, launches…).

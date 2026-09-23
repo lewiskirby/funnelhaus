@@ -16,7 +16,7 @@ const sameId = (a: string, b: string) => a.replace(/-/g, "").toLowerCase() === b
 
 function toClientTask(record: TaskRecord): Task {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { clientId, ...safe } = record;
+  const { clientId, templateId, ...safe } = record;
   return safe;
 }
 
@@ -92,11 +92,14 @@ export async function getClientTask(clientId: string, taskId: string): Promise<T
   return record ? toClientTask(record) : null;
 }
 
-/** The body of the task's Notion page. */
+/** The body of the task's own Notion page, or its template's if the task page is empty. */
 export async function getClientTaskContent(clientId: string, taskId: string): Promise<ContentBlock[]> {
-  if (!(await findOwnedTask(clientId, taskId))) return [];
+  const task = await findOwnedTask(clientId, taskId);
+  if (!task) return [];
   try {
-    return await notion.getPageContent(taskId);
+    const own = await notion.getPageContent(taskId);
+    if (own.length > 0 || !task.templateId) return own;
+    return await notion.getPageContent(task.templateId);
   } catch {
     return []; // Details are logged in notion.ts.
   }
