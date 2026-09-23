@@ -220,8 +220,15 @@
       <div class="check">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <h1>Thanks, You're In</h1>
-      <p>We've received your onboarding form. Here's how to get set up in your FunnelHaus client portal, where you'll find everything we need from you and everything we're working on.</p>
+      <h1 id="thanks-heading">Thanks, You're In</h1>
+      <p>We've received your onboarding form. Here's how to set up your FunnelHaus client portal, where you'll find everything we need from you and everything we're working on.</p>
+      <script>
+        // Personalise with the first name saved by the /welcome form.
+        try {
+          const first = sessionStorage.getItem('fh_first_name');
+          if (first) document.getElementById('thanks-heading').textContent = 'Thanks, ' + first + '. Here’s How To Set Up Your Portal';
+        } catch (_) {}
+      </script>
     </div>
   </section>
 

@@ -340,13 +340,17 @@
           </div>
           <div class="field-row">
             <div class="field">
-              <label for="name">Your name<span class="req">*</span></label>
-              <input type="text" id="name" name="name" required maxlength="200" autocomplete="name" />
+              <label for="first_name">First name<span class="req">*</span></label>
+              <input type="text" id="first_name" name="first_name" required maxlength="100" autocomplete="given-name" />
             </div>
             <div class="field">
-              <label for="email">Your email<span class="req">*</span></label>
-              <input type="email" id="email" name="email" required maxlength="320" autocomplete="email" />
+              <label for="last_name">Last name<span class="req">*</span></label>
+              <input type="text" id="last_name" name="last_name" required maxlength="100" autocomplete="family-name" />
             </div>
+          </div>
+          <div class="field">
+            <label for="email">Your email<span class="req">*</span></label>
+            <input type="email" id="email" name="email" required maxlength="320" autocomplete="email" />
           </div>
           <div class="field">
             <label for="google_email">What is your Google account email?<span class="req">*</span></label>
@@ -509,6 +513,8 @@
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(data.error || "We couldn't submit your form. Please try again.");
+          // Hand the first name to the next page without putting it in the URL.
+          try { sessionStorage.setItem('fh_first_name', payload.first_name.trim()); } catch (_) {}
           window.location.href = data.redirect || '/welcome/next/';
         } catch (err) {
           errorBox.textContent = err instanceof TypeError

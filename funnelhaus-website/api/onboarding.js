@@ -6,7 +6,8 @@ const NEXT_PAGE = '/welcome/next/';
 // Form field name → max length. Keys are what Make receives.
 const FIELDS = {
   business_name: 200,
-  name: 200,
+  first_name: 100,
+  last_name: 100,
   email: 320,
   google_email: 320,
   primary_language: 50,
@@ -27,7 +28,7 @@ const FIELDS = {
   goals: 2000,
 };
 
-const REQUIRED = ['business_name', 'name', 'email', 'google_email'];
+const REQUIRED = ['business_name', 'first_name', 'last_name', 'email', 'google_email'];
 const EMAILS = ['email', 'google_email'];
 const LANGUAGES = ['🇬🇧 English', '🇩🇪 German', '🇪🇸 Spanish'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
