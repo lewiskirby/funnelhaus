@@ -89,40 +89,170 @@
     }
 
     /* ════════════════════════════════════════════════
-       FORM EMBED
+       ONBOARDING FORM
     ════════════════════════════════════════════════ */
     .form-section { padding: 24px 0 100px; }
 
     .form-card {
+      max-width: 760px;
+      margin: 0 auto;
       background: var(--white);
       border: 1px solid var(--border);
       border-radius: var(--r-xl);
-      overflow: hidden;
       box-shadow: 0 20px 60px rgba(0,0,0,0.06);
+      padding: 52px 56px;
     }
 
-    .form-card iframe {
-      display: block;
-      width: 100%;
-      height: 1000px;
-      border: none;
+    .form-group + .form-group {
+      margin-top: 44px;
+      padding-top: 44px;
+      border-top: 1px solid var(--border);
     }
-
-    .form-fallback {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 14px;
-      color: var(--muted);
-    }
-    .form-fallback a {
-      color: var(--red);
+    .form-group-title {
+      font-size: 12px;
       font-weight: 600;
-      text-decoration: underline;
-      text-decoration-color: var(--red-faint);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--red);
+      margin-bottom: 26px;
     }
+
+    .field + .field { margin-top: 26px; }
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 26px 20px;
+    }
+    .field-row + .field { margin-top: 26px; }
+    .field + .field-row { margin-top: 26px; }
+    .field-row .field + .field { margin-top: 0; }
+
+    .field label,
+    .field legend {
+      display: block;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--dark);
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+    .field .req { color: var(--red); margin-left: 2px; }
+    .field .hint {
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-bottom: 10px;
+    }
+    .field label + input,
+    .field label + select,
+    .field label + textarea { margin-top: 6px; }
+    fieldset.field { border: none; }
+
+    .field input[type="text"],
+    .field input[type="email"],
+    .field select,
+    .field textarea {
+      width: 100%;
+      font: inherit;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--cream);
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: var(--r);
+      padding: 12px 14px;
+      transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+    }
+    .field textarea { min-height: 120px; resize: vertical; line-height: 1.55; }
+    .field select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236a6a6a' stroke-width='1.6' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 38px; }
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      outline: none;
+      background: var(--white);
+      border-color: var(--red);
+      box-shadow: 0 0 0 4px var(--red-faint);
+    }
+
+    .choice-row { display: flex; gap: 10px; }
+    .choice {
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .choice input { position: absolute; opacity: 0; pointer-events: none; }
+    .choice span {
+      display: inline-block;
+      padding: 10px 22px;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 100px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .choice input:checked + span {
+      background: var(--red);
+      border-color: var(--red);
+      color: #fff;
+    }
+    .choice input:focus-visible + span { box-shadow: 0 0 0 4px var(--red-faint); }
+
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+    .form-footer {
+      margin-top: 44px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .form-note { font-size: 13.5px; color: var(--muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 15px 28px;
+      border-radius: 100px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      border: none;
+      background: var(--red);
+      color: #fff;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+    .btn:hover { background: var(--red-dark); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(112,0,0,0.28); }
+    .btn[disabled] { opacity: 0.6; cursor: wait; transform: none; box-shadow: none; }
+    .btn-arrow {
+      width: 30px; height: 30px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-arrow svg { width: 11px; height: 11px; }
+
+    .form-error {
+      display: none;
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: var(--r);
+      background: var(--red-faint);
+      color: var(--red);
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .form-error.show { display: block; }
 
     @media (max-width: 720px) {
-      .form-card iframe { height: 1300px; }
+      .form-card { padding: 36px 22px; border-radius: var(--r-lg); }
+      .field-row { grid-template-columns: 1fr; }
+      .form-footer { flex-direction: column-reverse; align-items: stretch; }
+      .btn { justify-content: center; }
     }
 
     /* ════════════════════════════════════════════════
@@ -200,19 +330,197 @@
 
   <section class="form-section">
     <div class="container">
-      <div class="form-card fade in">
-        <iframe
-          src="https://lewisdkkirby.notion.site/ebd/3d004bbfdb0080b5a61ada7ff3aea9c8"
-          title="FunnelHaus Onboarding Form"
-          allowfullscreen
-        ></iframe>
-      </div>
-      <p class="form-fallback">
-        Having trouble viewing the form?
-        <a href="https://lewisdkkirby.notion.site/3d004bbfdb0080b5a61ada7ff3aea9c8" target="_blank" rel="noopener">Open it in a new tab</a>
-      </p>
+      <form class="form-card fade in" id="onboarding-form" action="/api/onboarding" method="post">
+
+        <div class="form-group">
+          <h2 class="form-group-title">About you</h2>
+          <div class="field">
+            <label for="business_name">Business name<span class="req">*</span></label>
+            <input type="text" id="business_name" name="business_name" required maxlength="200" autocomplete="organization" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="name">Your name<span class="req">*</span></label>
+              <input type="text" id="name" name="name" required maxlength="200" autocomplete="name" />
+            </div>
+            <div class="field">
+              <label for="email">Your email<span class="req">*</span></label>
+              <input type="email" id="email" name="email" required maxlength="320" autocomplete="email" />
+            </div>
+          </div>
+          <div class="field">
+            <label for="google_email">What is your Google account email?<span class="req">*</span></label>
+            <p class="hint">This is to make sure that you have access to the folders that we will be working in.</p>
+            <input type="email" id="google_email" name="google_email" required maxlength="320" />
+          </div>
+          <div class="field">
+            <label for="primary_language">Primary language</label>
+            <select id="primary_language" name="primary_language">
+              <option value="">Select…</option>
+              <option value="🇬🇧 English">🇬🇧 English</option>
+              <option value="🇩🇪 German">🇩🇪 German</option>
+              <option value="🇪🇸 Spanish">🇪🇸 Spanish</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="other_google_accounts">Are there any other Google accounts that we need to share access with?</label>
+            <textarea id="other_google_accounts" name="other_google_accounts" maxlength="2000" style="min-height:80px"></textarea>
+          </div>
+          <div class="field">
+            <label for="team_contacts">Is there anyone else from your team who we need to be in touch with?</label>
+            <textarea id="team_contacts" name="team_contacts" maxlength="2000" style="min-height:80px"></textarea>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <h2 class="form-group-title">Brand &amp; assets</h2>
+          <div class="field">
+            <label for="social_links">Social media links</label>
+            <textarea id="social_links" name="social_links" maxlength="2000" style="min-height:80px"></textarea>
+          </div>
+          <div class="field">
+            <label for="asset_folders">Do you have any links to folders with creative assets?</label>
+            <p class="hint">Brand guides, image assets, video assets. Please paste the link(s) and ensure that info@funnelhaus.co has access.</p>
+            <textarea id="asset_folders" name="asset_folders" maxlength="2000"></textarea>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="colours">Which colours do you use?</label>
+              <p class="hint">Paste their hex or RGB codes.</p>
+              <input type="text" id="colours" name="colours" maxlength="1000" />
+            </div>
+            <div class="field">
+              <label for="fonts">Which font(s) do you use?</label>
+              <p class="hint">Paste a link or just write the name(s).</p>
+              <input type="text" id="fonts" name="fonts" maxlength="1000" />
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <h2 class="form-group-title">Funnels &amp; paid media</h2>
+          <div class="field">
+            <label for="funnel_urls">Main funnel URL(s)</label>
+            <p class="hint">Please paste the link(s) to the funnels/communities/conversion locations you're currently driving traffic to. Please explain if you send different traffic to different locations (e.g. "I send Meta ads traffic to this VSL →").</p>
+            <textarea id="funnel_urls" name="funnel_urls" maxlength="2000"></textarea>
+          </div>
+          <fieldset class="field">
+            <legend>Will we be running paid media?</legend>
+            <div class="choice-row">
+              <label class="choice"><input type="radio" name="paid_media" value="Yes" /><span>Yes</span></label>
+              <label class="choice"><input type="radio" name="paid_media" value="No" /><span>No</span></label>
+            </div>
+          </fieldset>
+          <div class="field" id="budget-field">
+            <label for="paid_media_budget">Monthly starting budget for paid media</label>
+            <p class="hint">If you're unsure, just input a limit you wouldn't want it to exceed and we can talk more about it.</p>
+            <input type="text" id="paid_media_budget" name="paid_media_budget" maxlength="500" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <h2 class="form-group-title">Offer &amp; audience</h2>
+          <div class="field">
+            <label for="offers">Your offer(s)</label>
+            <p class="hint">Please explain the details of your offer structure and price point. If you have multiple offers, please also make clear what your priority is.</p>
+            <textarea id="offers" name="offers" maxlength="2000"></textarea>
+          </div>
+          <div class="field">
+            <label for="target_customer">Target customer</label>
+            <p class="hint">Please explain who your target customer is. If there is a difference between who currently buys from you and who you want to buy from you, then please make this clear. There will be a chance for you to go into more detail with this later in the onboarding process too.</p>
+            <textarea id="target_customer" name="target_customer" maxlength="2000"></textarea>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <h2 class="form-group-title">History &amp; goals</h2>
+          <div class="field">
+            <label for="worked">What has worked for you when marketing in the past?</label>
+            <p class="hint">Funnel type, target market, messaging, platforms, offer, sales style. The more detail, the better.</p>
+            <textarea id="worked" name="worked" maxlength="2000"></textarea>
+          </div>
+          <div class="field">
+            <label for="not_worked">What hasn't worked for you when marketing in the past?</label>
+            <p class="hint">Funnel type, target market, messaging, platforms, offer, sales style. The more detail, the better.</p>
+            <textarea id="not_worked" name="not_worked" maxlength="2000"></textarea>
+          </div>
+          <div class="field">
+            <label for="starting_point">Where are we starting from?</label>
+            <p class="hint">When you look back at the last few months, how has the business been going? Revenue, total number of leads, number of sales calls, conversion rate, % of sales coming from each source.</p>
+            <textarea id="starting_point" name="starting_point" maxlength="2000"></textarea>
+          </div>
+          <div class="field">
+            <label for="goals">Where are we going?</label>
+            <p class="hint">Please let us know if you have any specific goals in mind for the business.</p>
+            <textarea id="goals" name="goals" maxlength="2000"></textarea>
+          </div>
+        </div>
+
+        <div class="hp" aria-hidden="true">
+          <label for="company_website">Leave this field empty</label>
+          <input type="text" id="company_website" name="company_website" tabindex="-1" autocomplete="off" />
+        </div>
+
+        <div class="form-error" id="form-error" role="alert"></div>
+
+        <div class="form-footer">
+          <p class="form-note"><span class="req" style="color:var(--red)">*</span> Required</p>
+          <button type="submit" class="btn" id="submit-btn">
+            <span id="submit-label">Submit &amp; continue</span>
+            <span class="btn-arrow">
+              <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 6h10M6.5 1.5L11 6l-4.5 4.5" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </button>
+        </div>
+      </form>
     </div>
   </section>
+
+  <script>
+    (function () {
+      const form = document.getElementById('onboarding-form');
+      const btn = document.getElementById('submit-btn');
+      const label = document.getElementById('submit-label');
+      const errorBox = document.getElementById('form-error');
+      const budget = document.getElementById('budget-field');
+
+      // Only ask about budget once they've said yes to paid media.
+      const syncBudget = () => {
+        const choice = form.querySelector('input[name="paid_media"]:checked');
+        budget.hidden = !choice || choice.value !== 'Yes';
+      };
+      form.querySelectorAll('input[name="paid_media"]').forEach((r) => r.addEventListener('change', syncBudget));
+      syncBudget();
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorBox.classList.remove('show');
+        btn.disabled = true;
+        label.textContent = 'Submitting…';
+
+        const payload = Object.fromEntries(new FormData(form).entries());
+        if (payload.paid_media !== 'Yes') payload.paid_media_budget = '';
+
+        try {
+          const res = await fetch(form.action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "We couldn't submit your form. Please try again.");
+          window.location.href = data.redirect || '/welcome/next/';
+        } catch (err) {
+          errorBox.textContent = err instanceof TypeError
+            ? "We couldn't reach the server. Please check your connection and try again."
+            : err.message;
+          errorBox.classList.add('show');
+          btn.disabled = false;
+          label.textContent = 'Submit & continue';
+        }
+      });
+    })();
+  </script>
 
   <footer>
     <div class="container">
