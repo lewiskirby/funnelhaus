@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { saveAnswer } from "@/app/(portal)/tasks/[id]/actions";
 import { Rich } from "@/components/rich-text";
@@ -36,6 +37,7 @@ function AnswerField({ id, taskId, table, row, initial }: {
   const saved = useRef(initial);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const area = useRef<HTMLTextAreaElement>(null);
+  const router = useRouter();
 
   // Grow with the answer instead of scrolling inside a small box.
   useLayoutEffect(() => {
@@ -56,10 +58,11 @@ function AnswerField({ id, taskId, table, row, initial }: {
         return;
       }
       setStatus("saving");
+      let started = false;
       for (let attempt = 0; ; attempt++) {
         let error: string | undefined;
         try {
-          error = (await saveAnswer(taskId, table, row, answer)).error;
+          ({ error, started = false } = await saveAnswer(taskId, table, row, answer));
         } catch {
           error = "offline";
         }
@@ -71,6 +74,8 @@ function AnswerField({ id, taskId, table, row, initial }: {
         await wait(RETRY_DELAYS_MS[attempt]);
       }
       saved.current = answer;
+      // The first answer moved the task to In Progress: update the status shown, in the background.
+      if (started) router.refresh();
       if (latest.current === answer) {
         unsaved.delete(id);
         setStatus("saved");

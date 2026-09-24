@@ -28,8 +28,9 @@ export async function setTaskResponse(_prev: ActionState, formData: FormData): P
 }
 
 /** Autosave for one "Your Answer" cell in a task's questionnaire table. */
-export async function saveAnswer(taskId: string, tableIndex: number, rowIndex: number, answer: string): Promise<{ error?: string }> {
+/** `started`: this answer moved the task to In Progress, so the browser should refresh its status. */
+export async function saveAnswer(taskId: string, tableIndex: number, rowIndex: number, answer: string): Promise<{ error?: string; started?: boolean }> {
   const client = await requireClient();
   const result = await saveTableAnswer(client.id, taskId, tableIndex, rowIndex, answer);
-  return result.ok ? {} : { error: result.error };
+  return result.ok ? { started: result.started } : { error: result.error };
 }

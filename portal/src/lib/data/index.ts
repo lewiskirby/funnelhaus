@@ -176,7 +176,7 @@ export async function saveTableAnswer(
   tableIndex: number,
   rowIndex: number,
   answer: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; started: boolean } | { ok: false; error: string }> {
   if (!Number.isInteger(tableIndex) || !Number.isInteger(rowIndex) || tableIndex < 0 || rowIndex < 0) {
     return { ok: false, error: "We couldn't save that answer." };
   }
@@ -197,7 +197,7 @@ export async function saveTableAnswer(
       return { ok: false, error: "This question has changed. Please refresh the page." };
     }
     await notion.setTableCellInNotion(rowId, table.rows[rowIndex], table.answerColumn, answer.trim());
-    return { ok: true };
+    return { ok: true, started: answer.trim() ? await markStarted(task) : false };
   } catch {
     return { ok: false, error: "We couldn't save that answer. We'll keep trying." };
   }
@@ -231,12 +231,26 @@ async function markActiveIfOnboardingDone(clientId: string, justCompletedId: str
   }
 }
 
+/** Filling anything in moves a task from Not Started to In Progress. Other statuses are left alone. */
+async function markStarted(task: TaskRecord): Promise<boolean> {
+  if (task.status !== "Not Started") return false;
+  try {
+    await notion.setTaskStatusInNotion(task.id, "In Progress");
+    return true;
+  } catch {
+    return false; // The answer is saved either way; the status can be set by hand.
+  }
+}
+
 export async function saveTaskResponse(clientId: string, taskId: string, response: string): Promise<UpdateTaskResult> {
   const trimmed = response.trim();
   if (trimmed.length > RESPONSE_MAX) return { ok: false, error: `Please keep your response under ${RESPONSE_MAX} characters.` };
-  if (!(await findOwnedTask(clientId, taskId))) return { ok: false, error: "We couldn't find that task." };
+  const owned = await findOwnedTask(clientId, taskId);
+  if (!owned) return { ok: false, error: "We couldn't find that task." };
   try {
-    return { ok: true, task: toClientTask(await notion.setTaskResponseInNotion(taskId, trimmed)) };
+    const task = toClientTask(await notion.setTaskResponseInNotion(taskId, trimmed));
+    if (trimmed && (await markStarted(owned))) task.status = "In Progress";
+    return { ok: true, task };
   } catch {
     return { ok: false, error: "We couldn't save your response. Please try again." };
   }
