@@ -6,8 +6,9 @@
 import "server-only";
 import { cache } from "react";
 import * as notion from "./notion";
+import { ANSWER_MAX } from "@/lib/limits";
 import { hashPassword, isHashed, verifyPassword } from "@/lib/password";
-import type { Client, ClientEvent, ContentBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
+import type { Client, ClientEvent, ContentBlock, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete"];
@@ -93,16 +94,88 @@ export async function getClientTask(clientId: string, taskId: string): Promise<T
   return record ? toClientTask(record) : null;
 }
 
-/** The body of the task's own Notion page, or its template's if the task page is empty. */
+/**
+ * The body of the task's own Notion page, or its template's if the task page is empty.
+ * The task's own page is always read fresh because clients write answers into it.
+ */
 export async function getClientTaskContent(clientId: string, taskId: string): Promise<ContentBlock[]> {
   const task = await findOwnedTask(clientId, taskId);
   if (!task) return [];
   try {
-    const own = await notion.getPageContent(taskId);
+    const own = await notion.getPageContent(taskId, { fresh: true });
     if (own.length > 0 || !task.templateId) return own;
     return await notion.getPageContent(task.templateId);
   } catch {
     return []; // Details are logged in notion.ts.
+  }
+}
+
+// ── Questionnaire answers ───────────────────────────
+// Tables with a "Your Answer" column are filled in by the client. Answers are
+// written into the client's own task page; the shared template is never changed.
+
+// One copy at a time per task, so two quick answers can't copy the template twice.
+const copying = new Map<string, Promise<void>>();
+
+/** The task page's own body, copying the template in first if the page is still empty. */
+async function ownContentForAnswers(task: TaskRecord, own: ContentBlock[]): Promise<ContentBlock[]> {
+  const pending = copying.get(task.id);
+  if (pending) {
+    await pending.catch(() => {});
+    own = await notion.getPageContent(task.id, { fresh: true });
+  }
+  if (own.length > 0 || !task.templateId) return own;
+
+  const copy = notion.copyPageContent(task.templateId, task.id);
+  copying.set(task.id, copy);
+  try {
+    await copy;
+  } finally {
+    copying.delete(task.id);
+  }
+  return notion.getPageContent(task.id, { fresh: true });
+}
+
+function findTable(blocks: ContentBlock[], index: number): TableBlock | undefined {
+  for (const block of blocks) {
+    if (block.type === "table" && block.index === index) return block;
+    if ("children" in block && block.children) {
+      const found = findTable(block.children, index);
+      if (found) return found;
+    }
+  }
+}
+
+export async function saveTableAnswer(
+  clientId: string,
+  taskId: string,
+  tableIndex: number,
+  rowIndex: number,
+  answer: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!Number.isInteger(tableIndex) || !Number.isInteger(rowIndex) || tableIndex < 0 || rowIndex < 0) {
+    return { ok: false, error: "We couldn't save that answer." };
+  }
+  if (answer.length > ANSWER_MAX) return { ok: false, error: `Please keep each answer under ${ANSWER_MAX.toLocaleString("en-GB")} characters.` };
+  // Read the page while ownership is checked; nothing is written until both are back.
+  const [task, own] = await Promise.all([
+    findOwnedTask(clientId, taskId),
+    notion.getPageContent(taskId, { fresh: true }).catch(() => null),
+  ]);
+  if (!task) return { ok: false, error: "We couldn't find that task." };
+
+  try {
+    if (!own) throw new Error("Couldn't read the task page");
+    const table = findTable(await ownContentForAnswers(task, own), tableIndex);
+    const rowId = table?.rowIds?.[rowIndex];
+    // Only the answer column of a question row can be written, never the header or the questions.
+    if (!table || table.answerColumn === undefined || !rowId || (table.header && rowIndex === 0)) {
+      return { ok: false, error: "This question has changed. Please refresh the page." };
+    }
+    await notion.setTableCellInNotion(rowId, table.rows[rowIndex], table.answerColumn, answer.trim());
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't save that answer. We'll keep trying." };
   }
 }
 

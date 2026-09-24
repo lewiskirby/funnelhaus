@@ -1,33 +1,7 @@
-import type { ReactNode } from "react";
+import { QuestionnaireTable } from "@/components/questionnaire-table";
+import { Rich, plain } from "@/components/rich-text";
 import { Icon } from "@/components/ui";
-import type { ContentBlock, RichText } from "@/lib/types";
-
-// ── Inline text ─────────────────────────────────────
-
-function Rich({ parts }: { parts: RichText[] }) {
-  return (
-    <>
-      {parts.map((p, i) => {
-        let node: ReactNode = p.text;
-        if (p.code) node = <code className="rounded-md bg-canvas px-1.5 py-0.5 font-mono text-[0.9em] text-ink ring-1 ring-line">{node}</code>;
-        if (p.bold) node = <strong className="font-semibold text-ink">{node}</strong>;
-        if (p.italic) node = <em>{node}</em>;
-        if (p.strikethrough) node = <s>{node}</s>;
-        if (p.underline) node = <u>{node}</u>;
-        if (p.href) {
-          node = (
-            <a href={p.href} target="_blank" rel="noopener" className="font-medium text-brand underline decoration-brand/25 underline-offset-4 hover:decoration-brand">
-              {node}
-            </a>
-          );
-        }
-        return <span key={i}>{node}</span>;
-      })}
-    </>
-  );
-}
-
-const plain = (parts: RichText[]) => parts.map((p) => p.text).join("");
+import type { ContentBlock, RichText, TableBlock } from "@/lib/types";
 
 // ── Embeds ──────────────────────────────────────────
 
@@ -83,9 +57,48 @@ function Media({ url, caption }: { url: string; caption: RichText[] }) {
   );
 }
 
+// ── Tables ──────────────────────────────────────────
+
+function Table({ block }: { block: TableBlock }) {
+  const [head, ...body] = block.header ? block.rows : [undefined, ...block.rows];
+  return (
+    <div className="overflow-x-auto rounded-2xl ring-1 ring-line">
+      <table className="w-full border-collapse text-left text-[14.5px]">
+        {head && (
+          <thead className="bg-canvas">
+            <tr>
+              {head.map((cell, i) => (
+                <th key={i} className="border-b border-line px-4 py-3 font-semibold text-ink">
+                  <Rich parts={cell} />
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {body.map((row, i) => (
+            <tr key={i} className="border-t border-line first:border-t-0">
+              {row!.map((cell, j) => (
+                <td key={j} className="px-4 py-3 align-top">
+                  <Rich parts={cell} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** True if any table on the page has a "Your Answer" column. */
+export function hasAnswerTable(blocks: ContentBlock[]): boolean {
+  return blocks.some((b) => (b.type === "table" && b.answerColumn !== undefined) || ("children" in b && !!b.children && hasAnswerTable(b.children)));
+}
+
 // ── Blocks ──────────────────────────────────────────
 
-function Block({ block }: { block: ContentBlock }) {
+function Block({ block, taskId }: { block: ContentBlock; taskId?: string }) {
   switch (block.type) {
     case "paragraph":
       return block.text.length ? (
@@ -113,7 +126,7 @@ function Block({ block }: { block: ContentBlock }) {
           {block.icon && <span className="text-xl leading-7">{block.icon}</span>}
           <div className="min-w-0 flex-1 space-y-3">
             <p><Rich parts={block.text} /></p>
-            {block.children && <Blocks blocks={block.children} />}
+            {block.children && <Blocks blocks={block.children} taskId={taskId} />}
           </div>
         </div>
       );
@@ -126,7 +139,7 @@ function Block({ block }: { block: ContentBlock }) {
           </summary>
           {block.children && (
             <div className="space-y-3 px-5 pb-5 pl-12">
-              <Blocks blocks={block.children} />
+              <Blocks blocks={block.children} taskId={taskId} />
             </div>
           )}
         </details>
@@ -159,6 +172,18 @@ function Block({ block }: { block: ContentBlock }) {
       );
     case "media":
       return <Media url={block.url} caption={block.caption} />;
+    case "table":
+      return taskId && block.answerColumn !== undefined ? (
+        <QuestionnaireTable
+          taskId={taskId}
+          index={block.index}
+          header={block.header}
+          answerColumn={block.answerColumn}
+          rows={block.rows}
+        />
+      ) : (
+        <Table block={block} />
+      );
     default:
       return null;
   }
@@ -167,7 +192,7 @@ function Block({ block }: { block: ContentBlock }) {
 type ListBlock = { type: "bulleted_list_item" | "numbered_list_item"; text: RichText[]; children?: ContentBlock[] };
 
 /** Renders blocks, grouping consecutive list items into one list. */
-export function Blocks({ blocks }: { blocks: ContentBlock[] }) {
+export function Blocks({ blocks, taskId }: { blocks: ContentBlock[]; taskId?: string }) {
   const groups: (ContentBlock | { list: "ul" | "ol"; items: ListBlock[] })[] = [];
   for (const block of blocks) {
     if (block.type === "bulleted_list_item" || block.type === "numbered_list_item") {
@@ -184,7 +209,7 @@ export function Blocks({ blocks }: { blocks: ContentBlock[] }) {
   return (
     <>
       {groups.map((g, i) => {
-        if (!("list" in g)) return <Block key={i} block={g} />;
+        if (!("list" in g)) return <Block key={i} block={g} taskId={taskId} />;
         if (g.list === "ul") {
           return (
             <ul key={i} className="space-y-2">
@@ -193,7 +218,7 @@ export function Blocks({ blocks }: { blocks: ContentBlock[] }) {
                   <span className="mt-[10px] size-1.5 shrink-0 rounded-full bg-brand" />
                   <div className="min-w-0 flex-1 space-y-2">
                     <Rich parts={item.text} />
-                    {item.children && <Blocks blocks={item.children} />}
+                    {item.children && <Blocks blocks={item.children} taskId={taskId} />}
                   </div>
                 </li>
               ))}
@@ -207,7 +232,7 @@ export function Blocks({ blocks }: { blocks: ContentBlock[] }) {
                 <span className="w-5 shrink-0 text-right font-semibold text-brand tabular-nums">{j + 1}.</span>
                 <div className="min-w-0 flex-1 space-y-2">
                   <Rich parts={item.text} />
-                  {item.children && <Blocks blocks={item.children} />}
+                  {item.children && <Blocks blocks={item.children} taskId={taskId} />}
                 </div>
               </li>
             ))}
@@ -218,10 +243,17 @@ export function Blocks({ blocks }: { blocks: ContentBlock[] }) {
   );
 }
 
-export function NotionContent({ blocks }: { blocks: ContentBlock[] }) {
+/** `taskId` makes "Your Answer" tables on this page fillable by the client. */
+export function NotionContent({ blocks, taskId }: { blocks: ContentBlock[]; taskId?: string }) {
   return (
     <div className="space-y-4 text-[16px] leading-relaxed text-body">
-      <Blocks blocks={blocks} />
+      {taskId && hasAnswerTable(blocks) && (
+        <p className="flex items-center gap-2 rounded-xl bg-success-soft px-4 py-3 text-[14px] font-medium text-success">
+          <Icon.check className="size-4 shrink-0" strokeWidth={2} />
+          Type your answers below. Everything saves automatically, so you can come back and finish later.
+        </p>
+      )}
+      <Blocks blocks={blocks} taskId={taskId} />
     </div>
   );
 }

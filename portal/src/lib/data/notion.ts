@@ -3,7 +3,7 @@
 
 import "server-only";
 import { cache } from "react";
-import type { Client, ClientEvent, ClientIcon, ContentBlock, RichText, TaskRecord, TaskStatus } from "@/lib/types";
+import type { Client, ClientEvent, ClientIcon, ContentBlock, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -341,6 +341,12 @@ type BlockData = {
   language?: string;
   url?: string;
   icon?: { type: string; emoji?: string } | null;
+  color?: string;
+  is_toggleable?: boolean;
+  table_width?: number;
+  has_column_header?: boolean;
+  has_row_header?: boolean;
+  cells?: NotionRichText[][];
 } & Partial<FileRef>;
 
 const SAFE_HREF = /^(https?:|mailto:)/i;
@@ -383,11 +389,15 @@ async function toContent(blocks: Block[], depth: number): Promise<ContentBlock[]
   // Fetch every block's nested content at once instead of one after another.
   const nested = await Promise.all(
     blocks.map((b) =>
-      b.has_children && depth < MAX_DEPTH && b.type !== "child_page" && b.type !== "child_database"
-        ? listChildren(b.id).then((children) => toContent(children, depth + 1))
-        : Promise.resolve(undefined),
+      b.type === "table"
+        ? Promise.resolve(undefined)
+        : b.has_children && depth < MAX_DEPTH && b.type !== "child_page" && b.type !== "child_database"
+          ? listChildren(b.id).then((children) => toContent(children, depth + 1))
+          : Promise.resolve(undefined),
     ),
   );
+  // A table's rows are its children; tables are read whole at any depth.
+  const tableRows = await Promise.all(blocks.map((b) => (b.type === "table" ? listChildren(b.id) : Promise.resolve(undefined))));
   const out: ContentBlock[] = [];
   for (const [i, block] of blocks.entries()) {
     const data = (block[block.type] ?? {}) as BlockData;
@@ -410,6 +420,8 @@ async function toContent(blocks: Block[], depth: number): Promise<ContentBlock[]
       out.push({ type: "code", text: toRichText(data.rich_text), language: data.language });
     } else if (block.type === "divider") {
       out.push({ type: "divider" });
+    } else if (block.type === "table") {
+      out.push(toTable(data, tableRows[i] ?? []));
     } else if (block.type === "image" && fileUrl) {
       out.push({ type: "image", url: fileUrl, caption: toRichText(data.caption) });
     } else if (["video", "embed", "bookmark", "link_preview", "file", "pdf"].includes(block.type) && fileUrl && SAFE_HREF.test(fileUrl)) {
@@ -422,16 +434,167 @@ async function toContent(blocks: Block[], depth: number): Promise<ContentBlock[]
   return out;
 }
 
-// Page bodies change rarely, so keep them for a minute. Notion's signed image
+const ANSWER_HEADER = /^your answers?$/i;
+
+function toTable(data: BlockData, rows: Block[]): TableBlock {
+  const header = Boolean(data.has_column_header);
+  const cells = rows.map((r) => ((r.table_row as BlockData | undefined)?.cells ?? []).map((c) => toRichText(c)));
+  const headerTexts = header ? (cells[0] ?? []).map((c) => c.map((t) => t.text).join("").trim()) : [];
+  const answer = headerTexts.findIndex((t) => ANSWER_HEADER.test(t));
+  return {
+    type: "table",
+    index: -1, // numbered once the whole page is read
+    header,
+    answerColumn: answer >= 0 ? answer : undefined,
+    rows: cells,
+    rowIds: rows.map((r) => r.id),
+  };
+}
+
+/** Numbers tables in reading order so the browser can say which one an answer belongs to. */
+function numberTables(blocks: ContentBlock[], counter = { n: 0 }): ContentBlock[] {
+  for (const block of blocks) {
+    if (block.type === "table") block.index = counter.n++;
+    if ("children" in block && block.children) numberTables(block.children, counter);
+  }
+  return blocks;
+}
+
+async function readContent(pageId: string): Promise<ContentBlock[]> {
+  return numberTables(await toContent(await listChildren(pageId), 0));
+}
+
+// Template bodies change rarely, so keep them for a minute. Notion's signed image
 // links last an hour, so a short cache never serves an expired image.
 const contentCache = new Map<string, { at: number; blocks: Promise<ContentBlock[]> }>();
 
-/** The body of a Notion page as portal content blocks. */
-export async function getPageContent(pageId: string): Promise<ContentBlock[]> {
+/**
+ * The body of a Notion page as portal content blocks. `fresh` skips the cache,
+ * for pages clients write to, so they always see their latest answers.
+ */
+export async function getPageContent(pageId: string, { fresh = false } = {}): Promise<ContentBlock[]> {
+  if (fresh) return readContent(pageId);
   const hit = contentCache.get(pageId);
   if (hit && Date.now() - hit.at < CONTENT_TTL_MS) return hit.blocks;
-  const blocks = listChildren(pageId).then((children) => toContent(children, 0));
+  const blocks = readContent(pageId);
   contentCache.set(pageId, { at: Date.now(), blocks });
   blocks.catch(() => contentCache.delete(pageId)); // don't keep failures
   return blocks;
+}
+
+// ── Copying a template into a task ──────────────────
+// Clients answer on their own task page, never on the shared template, so the
+// template's body is copied across the first time they answer.
+
+const TEXT_LIMIT = 2000; // Notion's limit for one piece of rich text
+
+type OutRichText = { type: "text"; text: { content: string; link: { url: string } | null }; annotations?: NotionRichText["annotations"] };
+
+/** Rich text as plain text runs (mentions become their visible text). */
+function toOutRichText(parts: NotionRichText[] = []): OutRichText[] {
+  return parts.flatMap((t) =>
+    chunk(t.plain_text).map((content) => ({
+      type: "text" as const,
+      text: { content, link: t.href && SAFE_HREF.test(t.href) ? { url: t.href } : null },
+      ...(t.annotations ? { annotations: t.annotations } : {}),
+    })),
+  );
+}
+
+function chunk(value: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < value.length; i += TEXT_LIMIT) out.push(value.slice(i, i + TEXT_LIMIT));
+  return out;
+}
+
+const COPYABLE_TEXT = new Set([...TEXT_BLOCKS, "to_do", "callout", "code"]);
+const COPYABLE_MEDIA = new Set(["image", "video", "file", "pdf"]);
+
+type CopyItem = { payload: Record<string, unknown>; source?: Block };
+
+/** Turns source blocks into blocks Notion will accept. Hosted files can't be copied and are left out. */
+async function toCopyItems(blocks: Block[]): Promise<CopyItem[]> {
+  const items: CopyItem[] = [];
+  for (const block of blocks) {
+    const data = (block[block.type] ?? {}) as BlockData;
+    const t = block.type;
+    if (COPYABLE_TEXT.has(t)) {
+      const body: Record<string, unknown> = { rich_text: toOutRichText(data.rich_text) };
+      if (data.color) body.color = data.color;
+      if (t === "to_do") body.checked = Boolean(data.checked);
+      if (t === "code") body.language = data.language ?? "plain text";
+      if (t === "callout" && data.icon?.type === "emoji") body.icon = { type: "emoji", emoji: data.icon.emoji };
+      if (t.startsWith("heading_") && data.is_toggleable) body.is_toggleable = true;
+      items.push({ payload: { type: t, [t]: body }, source: block.has_children ? block : undefined });
+    } else if (t === "divider") {
+      items.push({ payload: { type: "divider", divider: {} } });
+    } else if (t === "table") {
+      const rows = await listChildren(block.id);
+      items.push({
+        payload: {
+          type: "table",
+          table: {
+            table_width: data.table_width,
+            has_column_header: Boolean(data.has_column_header),
+            has_row_header: Boolean(data.has_row_header),
+            children: rows.map((r) => ({
+              type: "table_row",
+              table_row: { cells: ((r.table_row as BlockData | undefined)?.cells ?? []).map((c) => toOutRichText(c)) },
+            })),
+          },
+        },
+      });
+    } else if (COPYABLE_MEDIA.has(t) && data.type === "external" && data.external?.url) {
+      items.push({ payload: { type: t, [t]: { type: "external", external: { url: data.external.url }, caption: toOutRichText(data.caption) } } });
+    } else if ((t === "bookmark" || t === "embed" || t === "link_preview") && data.url) {
+      items.push({ payload: { type: "bookmark", bookmark: { url: data.url } } });
+    } else if (block.has_children && t !== "child_page" && t !== "child_database") {
+      // Columns, synced blocks and the like: keep their contents, drop the wrapper.
+      items.push(...(await toCopyItems(await listChildren(block.id))));
+    }
+  }
+  return items;
+}
+
+async function appendCopies(targetId: string, items: CopyItem[], depth: number): Promise<void> {
+  for (let i = 0; i < items.length; i += 100) {
+    const batch = items.slice(i, i + 100);
+    const res = await notion<{ results: { id: string }[] }>(`/blocks/${targetId}/children`, {
+      method: "PATCH",
+      body: { children: batch.map((b) => b.payload) },
+    });
+    // Nested content goes in afterwards, under the block it was copied into.
+    for (const [j, item] of batch.entries()) {
+      if (item.source && depth < MAX_DEPTH && res.results[j]) {
+        await appendCopies(res.results[j].id, await toCopyItems(await listChildren(item.source.id)), depth + 1);
+      }
+    }
+  }
+}
+
+/** Copies one page's body onto the end of another (normally an empty task page). */
+export async function copyPageContent(fromPageId: string, toPageId: string): Promise<void> {
+  await appendCopies(toPageId, await toCopyItems(await listChildren(fromPageId)), 0);
+}
+
+/** Replaces one cell of a table row, keeping the row's other cells as they are. */
+export async function setTableCellInNotion(rowId: string, cells: RichText[][], column: number, value: string): Promise<void> {
+  const out = cells.map((cell, i) =>
+    i === column
+      ? chunk(value).map((content) => ({ type: "text" as const, text: { content, link: null } }))
+      : toOutRichText(
+          cell.map((t) => ({
+            plain_text: t.text,
+            href: t.href ?? null,
+            annotations: {
+              bold: Boolean(t.bold),
+              italic: Boolean(t.italic),
+              strikethrough: Boolean(t.strikethrough),
+              underline: Boolean(t.underline),
+              code: Boolean(t.code),
+            },
+          })),
+        ),
+  );
+  await notion(`/blocks/${rowId}`, { method: "PATCH", body: { table_row: { cells: out } } });
 }

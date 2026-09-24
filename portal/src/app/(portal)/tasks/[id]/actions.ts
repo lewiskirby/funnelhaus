@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { saveTaskResponse, updateTaskStatus } from "@/lib/data";
+import { saveTableAnswer, saveTaskResponse, updateTaskStatus } from "@/lib/data";
 import { requireClient } from "@/lib/session";
 import type { TaskStatus } from "@/lib/types";
 
@@ -25,4 +25,11 @@ export async function setTaskResponse(_prev: ActionState, formData: FormData): P
   if (!result.ok) return { error: result.error };
   revalidatePath("/", "layout");
   return { saved: true };
+}
+
+/** Autosave for one "Your Answer" cell in a task's questionnaire table. */
+export async function saveAnswer(taskId: string, tableIndex: number, rowIndex: number, answer: string): Promise<{ error?: string }> {
+  const client = await requireClient();
+  const result = await saveTableAnswer(client.id, taskId, tableIndex, rowIndex, answer);
+  return result.ok ? {} : { error: result.error };
 }

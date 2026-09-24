@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { NotionContent } from "@/components/notion-content";
+import { NotionContent, hasAnswerTable } from "@/components/notion-content";
 import { TaskHeader } from "@/components/task-status";
 import { Icon } from "@/components/ui";
 import { RESPONSE_MAX, getClientTask, getClientTaskContent } from "@/lib/data";
@@ -32,13 +32,16 @@ export default async function TaskPage({ params }: PageProps<"/tasks/[id]">) {
 
         {content.length > 0 && (
           <div className="p-7 sm:p-10">
-            <NotionContent blocks={content} />
+            <NotionContent blocks={content} taskId={task.id} />
           </div>
         )}
 
-        <div className="border-t border-line bg-canvas/60 p-7 sm:p-10">
-          <ResponseForm key={task.clientResponse ?? ""} taskId={task.id} initial={task.clientResponse} max={RESPONSE_MAX} />
-        </div>
+        {/* Questionnaires save as the client types, so a separate Save button would only confuse. */}
+        {!hasAnswerTable(content) && (
+          <div className="border-t border-line bg-canvas/60 p-7 sm:p-10">
+            <ResponseForm key={task.clientResponse ?? ""} taskId={task.id} initial={task.clientResponse} max={RESPONSE_MAX} />
+          </div>
+        )}
       </article>
     </div>
   );

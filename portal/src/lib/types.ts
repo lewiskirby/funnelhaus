@@ -65,4 +65,16 @@ export type ContentBlock =
   | { type: "code"; text: RichText[]; language?: string }
   | { type: "divider" }
   | { type: "image"; url: string; caption: RichText[] }
-  | { type: "media"; url: string; caption: RichText[] };
+  | { type: "media"; url: string; caption: RichText[] }
+  | TableBlock;
+
+// A Notion table. A header cell reading "Your Answer" makes that column fillable
+// by the client; `index` is the table's position on the page, used to save answers.
+export interface TableBlock {
+  type: "table";
+  index: number;
+  header: boolean;
+  answerColumn?: number;
+  rows: RichText[][][]; // rows → cells → text
+  rowIds?: string[]; // Notion block ids; server-only, never passed to the browser
+}
