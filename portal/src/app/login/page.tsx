@@ -21,7 +21,7 @@ export default async function LoginPage() {
           <span className="text-lg font-bold tracking-tight">FunnelHaus</span>
         </div>
 
-        <div className="relative mx-auto max-w-md text-center">
+        <div className="relative mx-auto max-w-md">
           <p className="mb-5 text-[13px] font-semibold text-white/40">Client portal</p>
           <h1 className="text-[44px] leading-[1.05] font-bold tracking-[-0.03em]">
             Everything about your growth, in one place.
