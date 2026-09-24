@@ -401,9 +401,14 @@ async function toContent(blocks: Block[], depth: number): Promise<ContentBlock[]
   const out: ContentBlock[] = [];
   for (const [i, block] of blocks.entries()) {
     const data = (block[block.type] ?? {}) as BlockData;
-    if (block.type === "child_page" || block.type === "child_database") {
-      // Sub-pages aren't expanded into the task; show their title only.
-      const title = (block[block.type] as { title?: string })?.title;
+    if (block.type === "child_page") {
+      // Sub-pages aren't expanded into the task, unless they're a translated version.
+      const title = (block.child_page as { title?: string })?.title ?? "";
+      out.push({ type: "subpage", id: block.id, title, flag: flagIn(title) });
+      continue;
+    }
+    if (block.type === "child_database") {
+      const title = (block.child_database as { title?: string })?.title;
       if (title) out.push({ type: "paragraph", text: [{ text: `📄 ${title}`, bold: true }] });
       continue;
     }
@@ -427,11 +432,28 @@ async function toContent(blocks: Block[], depth: number): Promise<ContentBlock[]
     } else if (["video", "embed", "bookmark", "link_preview", "file", "pdf"].includes(block.type) && fileUrl && SAFE_HREF.test(fileUrl)) {
       out.push({ type: "media", url: fileUrl, caption: toRichText(data.caption) });
     } else if (children?.length) {
-      // Unknown containers (columns, synced blocks): keep their contents.
-      out.push(...children);
+      // Unknown containers (columns, synced blocks): keep their contents,
+      // except a row like "🇩🇪 German version 👉 [sub-page]", which becomes that translation.
+      const translation = asTranslationRow(children);
+      if (translation) out.push(translation);
+      else out.push(...children);
     }
   }
   return out;
+}
+
+const FLAG = /[\u{1F1E6}-\u{1F1FF}]{2}/u;
+const flagIn = (text: string) => text.match(FLAG)?.[0];
+
+/** A short flag label next to a single sub-page marks that sub-page as a translated version. */
+function asTranslationRow(blocks: ContentBlock[]): ContentBlock | null {
+  const pages = blocks.filter((b) => b.type === "subpage");
+  const rest = blocks.filter((b) => b.type !== "subpage");
+  if (pages.length !== 1 || rest.some((b) => b.type !== "paragraph")) return null;
+  const label = rest.map((b) => ("text" in b ? b.text.map((t) => t.text).join("") : "")).join(" ").trim();
+  const flag = flagIn(label);
+  const page = pages[0] as Extract<ContentBlock, { type: "subpage" }>;
+  return flag && label.length <= 60 ? { ...page, flag: page.flag ?? flag } : null;
 }
 
 const ANSWER_HEADER = /^your answers?$/i;

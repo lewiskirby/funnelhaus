@@ -1,3 +1,4 @@
+import { LanguageTabs } from "@/components/language-tabs";
 import { QuestionnaireTable } from "@/components/questionnaire-table";
 import { Rich, plain } from "@/components/rich-text";
 import { Icon } from "@/components/ui";
@@ -163,15 +164,23 @@ function Block({ block, taskId }: { block: ContentBlock; taskId?: string }) {
       return <hr className="border-line" />;
     case "image":
       return (
-        <figure>
-          {/* Notion image URLs are signed and short-lived, so skip next/image caching. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={block.url} alt={plain(block.caption)} className="w-full rounded-2xl ring-1 ring-line" />
+        // 40% wide on larger screens (wider on phones so screenshots stay readable); click for full size.
+        <figure className="w-3/4 sm:w-2/5">
+          <a href={block.url} target="_blank" rel="noopener" className="block" title="Open full size">
+            {/* Notion image URLs are signed and short-lived, so skip next/image caching. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={block.url} alt={plain(block.caption)} className="w-full rounded-2xl ring-1 ring-line transition hover:ring-brand/40" />
+          </a>
           {block.caption.length > 0 && <figcaption className="mt-2 text-[13px] text-muted"><Rich parts={block.caption} /></figcaption>}
         </figure>
       );
     case "media":
       return <Media url={block.url} caption={block.caption} />;
+    case "subpage":
+      // Sub-pages aren't expanded into the task; show their title only.
+      return block.title ? <p><strong className="font-semibold text-ink">📄 {block.title}</strong></p> : null;
+    case "translation":
+      return null; // shown by NotionContent's language switch
     case "table":
       return taskId && block.answerColumn !== undefined ? (
         <QuestionnaireTable
@@ -243,10 +252,14 @@ export function Blocks({ blocks, taskId }: { blocks: ContentBlock[]; taskId?: st
   );
 }
 
-/** `taskId` makes "Your Answer" tables on this page fillable by the client. */
+/**
+ * `taskId` makes "Your Answer" tables on this page fillable by the client.
+ * Translated versions (e.g. a 🇩🇪 sub-page) get a language switch; the page itself is treated as English.
+ */
 export function NotionContent({ blocks, taskId }: { blocks: ContentBlock[]; taskId?: string }) {
-  return (
-    <div className="space-y-4 text-[16px] leading-relaxed text-body">
+  const translations = blocks.filter((b): b is Extract<ContentBlock, { type: "translation" }> => b.type === "translation");
+  const main = (
+    <>
       {taskId && hasAnswerTable(blocks) && (
         <p className="flex items-center gap-2 rounded-xl bg-success-soft px-4 py-3 text-[14px] font-medium text-success">
           <Icon.check className="size-4 shrink-0" strokeWidth={2} />
@@ -254,6 +267,20 @@ export function NotionContent({ blocks, taskId }: { blocks: ContentBlock[]; task
         </p>
       )}
       <Blocks blocks={blocks} taskId={taskId} />
+    </>
+  );
+  return (
+    <div className="space-y-4 text-[16px] leading-relaxed text-body">
+      {translations.length ? (
+        <LanguageTabs
+          tabs={[
+            { flag: "🇬🇧", label: "English", content: main },
+            ...translations.map((t) => ({ flag: t.flag, label: t.label, content: <Blocks blocks={t.blocks} /> })),
+          ]}
+        />
+      ) : (
+        main
+      )}
     </div>
   );
 }

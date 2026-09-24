@@ -66,6 +66,8 @@ export type ContentBlock =
   | { type: "divider" }
   | { type: "image"; url: string; caption: RichText[] }
   | { type: "media"; url: string; caption: RichText[] }
+  | { type: "subpage"; id: string; title: string; flag?: string } // `flag`: a translated version, e.g. "🇩🇪"
+  | { type: "translation"; flag: string; label: string; blocks: ContentBlock[] }
   | TableBlock;
 
 // A Notion table. A header cell reading "Your Answer" makes that column fillable

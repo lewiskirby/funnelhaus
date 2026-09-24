@@ -103,11 +103,35 @@ export async function getClientTaskContent(clientId: string, taskId: string): Pr
   if (!task) return [];
   try {
     const own = await notion.getPageContent(taskId, { fresh: true });
-    if (own.length > 0 || !task.templateId) return own;
-    return await notion.getPageContent(task.templateId);
+    const blocks = own.length > 0 || !task.templateId ? own : await notion.getPageContent(task.templateId);
+    return await withTranslations(blocks);
   } catch {
     return []; // Details are logged in notion.ts.
   }
+}
+
+const LANGUAGES: Record<string, string> = {
+  "🇩🇪": "Deutsch",
+  "🇦🇹": "Deutsch",
+  "🇨🇭": "Deutsch",
+  "🇬🇧": "English",
+  "🇺🇸": "English",
+  "🇪🇸": "Español",
+  "🇫🇷": "Français",
+  "🇮🇹": "Italiano",
+  "🇳🇱": "Nederlands",
+  "🇵🇹": "Português",
+  "🇵🇱": "Polski",
+};
+
+/** Swaps flagged sub-pages (e.g. a German version) for their content, so the portal can offer a language switch. */
+async function withTranslations(blocks: ContentBlock[]): Promise<ContentBlock[]> {
+  return Promise.all(
+    blocks.map(async (b): Promise<ContentBlock> => {
+      if (b.type !== "subpage" || !b.flag) return b;
+      return { type: "translation", flag: b.flag, label: LANGUAGES[b.flag] ?? b.title, blocks: await notion.getPageContent(b.id) };
+    }),
+  );
 }
 
 // ── Questionnaire answers ───────────────────────────
