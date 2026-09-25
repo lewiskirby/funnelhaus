@@ -18,8 +18,6 @@ const FIELDS = {
   asset_folders: 2000,
   colours: 1000,
   fonts: 1000,
-  other_google_accounts: 2000,
-  team_contacts: 2000,
   offers: 2000,
   target_customer: 2000,
   worked: 2000,
