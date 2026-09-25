@@ -57,6 +57,9 @@ export const Icon = {
   tasks: (p: IconProps) => (
     <svg {...base(p)}><path d="M8 5h9M8 10h9M8 15h9" /><path d="m2.5 5 1.2 1.2L6 4M2.5 10l1.2 1.2L6 9M2.5 15l1.2 1.2L6 14" /></svg>
   ),
+  users: (p: IconProps) => (
+    <svg {...base(p)}><circle cx="7.5" cy="7" r="3" /><path d="M2 16.5c0-2.8 2.5-4.5 5.5-4.5s5.5 1.7 5.5 4.5" /><path d="M13 4.2a3 3 0 0 1 0 5.6M15 12.3c1.8.6 3 2 3 4.2" /></svg>
+  ),
   chart: (p: IconProps) => (
     <svg {...base(p)}><path d="M3 17h14" /><path d="M5.5 13.5v-3M10 13.5V6M14.5 13.5v-5" /></svg>
   ),

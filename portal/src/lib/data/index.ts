@@ -6,9 +6,9 @@
 import "server-only";
 import { cache } from "react";
 import * as notion from "./notion";
+import { sendPortalEmail } from "@/lib/email";
 import { ANSWER_MAX } from "@/lib/limits";
-import { hashPassword, isHashed, verifyPassword } from "@/lib/password";
-import type { Client, ClientEvent, ContentBlock, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
+import type { Client, ClientEvent, ContentBlock, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete"];
@@ -29,48 +29,107 @@ async function findOwnedTask(clientId: string, taskId: string): Promise<TaskReco
 
 // ── Clients ─────────────────────────────────────────
 
-export async function verifyLogin(email: string, password: string): Promise<Client | null> {
-  const typed = email.trim();
-  // Notion's email filter is case-sensitive, so try as typed and lower-cased.
-  const candidates = await notion.findClientsByEmail(typed);
-  if (!candidates.length && typed !== typed.toLowerCase()) candidates.push(...(await notion.findClientsByEmail(typed.toLowerCase())));
-  const match = candidates.find(({ loginAccess }) => verifyPassword(password, loginAccess));
-  if (!match) return null;
-
-  // Make's sha256 and hand-typed reset passwords get upgraded to scrypt after the first sign-in,
-  // so a readable password never stays in Notion for long.
-  if (!match.loginAccess.startsWith("scrypt:")) {
-    try {
-      await notion.setLoginAccessInNotion(match.client.id, hashPassword(password));
-    } catch {
-      // Sign-in still succeeds; we'll try again next time.
-    }
-  }
-  return match.client;
-}
-
 export async function getClient(clientId: string): Promise<Client | null> {
   const client = await notion.getClientPage(clientId);
   return client?.portalEnabled ? client : null;
 }
 
-// ── Admin ───────────────────────────────────────────
-// One admin login (ADMIN_EMAIL + ADMIN_PASSWORD_HASH in the environment) that can
-// view every client. The password itself is never stored, only its scrypt hash.
+// ── Signing in ──────────────────────────────────────
+// Everyone signs in with a code emailed to them. ADMIN_EMAIL (default
+// info@funnelhaus.co) is the admin, who can view every client. Everyone else
+// needs an Active row in Portal Users linked to an in-progress client.
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "info@funnelhaus.co").toLowerCase();
 
-export function isAdminEmail(email: string) {
-  return email.trim().toLowerCase() === ADMIN_EMAIL;
+export type SignInAccount =
+  | { kind: "admin"; email: string }
+  | { kind: "user"; email: string; userId: string; clientId: string };
+
+/** Who this email signs in as, or null if it has no access. */
+export async function findSignInAccount(email: string): Promise<SignInAccount | null> {
+  const typed = email.trim();
+  if (typed.toLowerCase() === ADMIN_EMAIL) return { kind: "admin", email: typed };
+  const users = await notion.findActiveUsersByEmail(typed);
+  // An email on several clients signs in to the first one that's in progress.
+  for (const user of users) {
+    if (await getClient(user.clientId)) return { kind: "user", email: user.email || typed, userId: user.id, clientId: user.clientId };
+  }
+  return null;
 }
 
-export function verifyAdminLogin(email: string, password: string): boolean {
-  const stored = process.env.ADMIN_PASSWORD_HASH ?? "";
-  // The admin password must be stored hashed; a plain value in the environment is refused.
-  return isAdminEmail(email) && isHashed(stored) && verifyPassword(password, stored);
+/** The signed-in person, if they still have access to this client. Checked on every request. */
+export async function getSignedInUser(userId: string, clientId: string): Promise<PortalUser | null> {
+  const user = await notion.getPortalUser(userId);
+  return user?.active && sameId(user.clientId, clientId) ? user : null;
 }
 
-/** Any in-progress client (Onboarding or Active), with or without a password. Admin only. */
+/** Notes the sign-in in Notion; never blocks signing in. */
+export async function recordSignIn(userId: string): Promise<void> {
+  try {
+    await notion.setLastSignedInInNotion(userId, new Date().toISOString());
+  } catch {
+    // Details are logged in notion.ts.
+  }
+}
+
+// ── Team ────────────────────────────────────────────
+// Clients (and FunnelHaus in Notion) choose who can sign in to their portal.
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const TEAM_NAME_MAX = 80;
+
+/** Everyone with access to this client, oldest first. */
+export async function getTeam(clientId: string): Promise<PortalUser[]> {
+  const users = await notion.queryClientUsers(clientId);
+  return users.filter((u) => u.active && sameId(u.clientId, clientId));
+}
+
+export async function addTeammate(
+  client: Client,
+  inviterName: string,
+  name: string,
+  email: string,
+  addedBy: "Client" | "FunnelHaus",
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cleanName = name.trim();
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanName) return { ok: false, error: "Please enter their name." };
+  if (cleanName.length > TEAM_NAME_MAX) return { ok: false, error: `Please keep the name under ${TEAM_NAME_MAX} characters.` };
+  if (!EMAIL_RE.test(cleanEmail)) return { ok: false, error: "Please enter a valid email address." };
+  if (cleanEmail === ADMIN_EMAIL) return { ok: false, error: "That email can't be added here." };
+
+  try {
+    const everyone = await notion.queryClientUsers(client.id);
+    const existing = everyone.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existing?.active) return { ok: false, error: "That person already has access." };
+    // Someone removed earlier is simply switched back on.
+    if (existing) await notion.setPortalUserStatusInNotion(existing.id, "Active");
+    else await notion.createPortalUserInNotion({ name: cleanName, email: cleanEmail, clientId: client.id, addedBy });
+  } catch {
+    return { ok: false, error: "We couldn't add them just now. Please try again." };
+  }
+
+  try {
+    await sendPortalEmail({ type: "invite", email: cleanEmail, name: cleanName.split(/\s+/)[0], client_name: client.name, inviter: inviterName });
+  } catch (err) {
+    console.error("Teammate welcome email failed", err); // they can still sign in
+  }
+  return { ok: true };
+}
+
+export async function removeTeammate(clientId: string, userId: string, actingUserId?: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (actingUserId && sameId(actingUserId, userId)) return { ok: false, error: "You can't remove yourself." };
+  const user = await notion.getPortalUser(userId);
+  if (!user?.active || !sameId(user.clientId, clientId)) return { ok: false, error: "We couldn't find that person." };
+  try {
+    await notion.setPortalUserStatusInNotion(userId, "Removed");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't remove them just now. Please try again." };
+  }
+}
+
+/** Any in-progress client (Onboarding or Active), whether or not anyone can sign in yet. Admin only. */
 export async function getClientForAdmin(clientId: string): Promise<Client | null> {
   const client = await notion.getClientPage(clientId);
   return client && notion.isInProgress(client) ? client : null;

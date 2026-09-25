@@ -8,6 +8,7 @@ const items = [
   { href: "/", label: "Home", icon: Icon.home },
   { href: "/tasks", label: "Tasks", icon: Icon.tasks },
   { href: "/results", label: "Results", icon: Icon.chart },
+  { href: "/team", label: "Team", icon: Icon.users },
 ] as const;
 
 function isActive(pathname: string, href: string) {
@@ -45,7 +46,7 @@ export function BottomNav({ openTasks }: { openTasks: number }) {
   const pathname = usePathname();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className="mx-auto grid max-w-md grid-cols-3">
+      <div className="mx-auto grid max-w-md grid-cols-4">
         {items.map(({ href, label, icon: ItemIcon }) => {
           const active = isActive(pathname, href);
           return (

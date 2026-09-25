@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "hash-password": "node scripts/hash-password.mjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "next": "16.3.6",

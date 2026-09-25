@@ -2,53 +2,43 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { isAdminEmail, verifyAdminLogin, verifyLogin } from "@/lib/data";
-import { clearFailures, lockedForMinutes, recordFailure } from "@/lib/rate-limit";
+import { recordSignIn } from "@/lib/data";
 import { createAdminSession, createSession, destroySession } from "@/lib/session";
+import { requestCode, verifyCode } from "@/lib/signin";
 
-export type LoginState = { error?: string; email?: string } | undefined;
+export type LoginState = { step: "email" | "code"; email?: string; error?: string; resent?: boolean } | undefined;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const WRONG = "That email and password don't match. Please try again.";
 
-// Email + password, checked against "Email" and "Login access" on the
-// client's Notion record. The browser never learns which part was wrong.
+async function clientIp() {
+  return (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+}
+
+// Step 1 sends a 6-digit code; step 2 checks it and signs in for 30 days.
+// The same message shows whether or not an email has access, so the page never reveals who does.
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
-  if (!EMAIL_RE.test(email)) return { error: "Please enter a valid email address.", email };
+  const step = formData.get("step") === "code" ? "code" : "email";
+  if (!EMAIL_RE.test(email)) return { step: "email", email, error: "Please enter a valid email address." };
 
-  const password = String(formData.get("password") ?? "");
-  if (!password) return { error: "Please enter your password.", email };
+  if (step === "email" || formData.get("resend")) {
+    const result = await requestCode(email, await clientIp());
+    if (!result.ok) return { step, email, error: result.error };
+    return { step: "code", email, resent: step === "code" };
+  }
 
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const key = `${email.toLowerCase()}|${ip}`;
-  const wait = lockedForMinutes(key);
-  if (wait) return { error: `Too many attempts. Please try again in ${wait} minute${wait === 1 ? "" : "s"}.`, email };
+  const code = String(formData.get("code") ?? "").replace(/\D/g, "");
+  if (code.length !== 6) return { step: "code", email, error: "Please enter the 6-digit code from the email." };
 
-  // The admin email only ever signs in as admin, never as a client.
-  if (isAdminEmail(email)) {
-    if (!verifyAdminLogin(email, password)) {
-      recordFailure(key);
-      return { error: WRONG, email };
-    }
-    clearFailures(key);
+  const result = await verifyCode(email, code, await clientIp());
+  if (!result.ok) return { step: "code", email, error: result.error };
+
+  if (result.account.kind === "admin") {
     await createAdminSession();
-    redirect("/");
+  } else {
+    await createSession(result.account.userId, result.account.clientId);
+    await recordSignIn(result.account.userId);
   }
-
-  let client;
-  try {
-    client = await verifyLogin(email, password);
-  } catch {
-    return { error: "We couldn't sign you in just now. Please try again in a moment.", email };
-  }
-  if (!client) {
-    recordFailure(key);
-    return { error: WRONG, email };
-  }
-
-  clearFailures(key);
-  await createSession(client.id);
   redirect("/");
 }
 

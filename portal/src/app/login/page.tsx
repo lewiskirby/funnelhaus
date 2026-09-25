@@ -43,7 +43,7 @@ export default async function LoginPage() {
           </div>
 
           <h2 className="text-[32px] font-bold tracking-[-0.03em] text-ink">Welcome back</h2>
-          <p className="mt-2 mb-9 text-[15px] text-muted">Sign in with the email and password we sent you.</p>
+          <p className="mt-2 mb-9 text-[15px] text-muted">Enter your email and we’ll send you a 6-digit code. No password needed.</p>
 
           <LoginForm />
 

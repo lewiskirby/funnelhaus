@@ -19,6 +19,17 @@ export interface Client {
   assetFolderUrl?: string; // Client Database → "Asset upload folder"
 }
 
+// A person who can sign in to a client's portal (Portal Users database).
+export interface PortalUser {
+  id: string;
+  name: string;
+  email: string;
+  clientId: string;
+  active: boolean;
+  addedBy?: string; // "Onboarding form" | "FunnelHaus" | "Client"
+  lastSignedIn?: string; // ISO date-time
+}
+
 // A task from the Client Tasks database. Only these fields are read; SOP stays in Notion.
 export interface Task {
   id: string;

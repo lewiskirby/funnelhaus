@@ -3,7 +3,7 @@
 
 import "server-only";
 import { cache } from "react";
-import type { Client, ClientEvent, ClientIcon, ContentBlock, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import type { Client, ClientEvent, ClientIcon, ContentBlock, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -13,6 +13,7 @@ export const TASKS_DS = process.env.NOTION_TASKS_DS ?? "3e404bbf-db00-804b-9f7d-
 export const EVENTS_DS = process.env.NOTION_EVENTS_DS ?? "3e404bbf-db00-8058-8f62-000bc97aa059";
 const CONTENT_TTL_MS = 60_000; // how long page content and template icons are cached
 export const TRACKER_DS = process.env.NOTION_TRACKER_DS ?? "3c104bbf-db00-802e-b3e3-000bba4c7e16";
+export const USERS_DS = process.env.NOTION_USERS_DS ?? "cbac4674-b2ff-472e-8057-dfe82c253644";
 
 // ── HTTP ────────────────────────────────────────────
 
@@ -106,28 +107,10 @@ function toClient(page: Page): Client {
     contactEmails: p["Email"]?.email ? [p["Email"].email] : [],
     status: status === "Onboarding" || status === "Inactive" ? status : "Active",
     rawStatus: status,
-    // Portal access requires a password in "Login access" and a Status in Notion's
-    // "In progress" group (Onboarding or Active). No Status and Inactive are locked out.
-    portalEnabled: Boolean(text(p["Login access"])) && IN_PROGRESS.includes(status),
+    // Portal access requires a Status in Notion's "In progress" group (Onboarding or Active).
+    // No Status and Inactive are locked out. Who can sign in lives in Portal Users.
+    portalEnabled: IN_PROGRESS.includes(status),
   };
-}
-
-/** Portal-enabled clients with this Email, plus their "Login access" value for the caller to check. */
-export async function findClientsByEmail(email: string): Promise<{ client: Client; loginAccess: string }[]> {
-  const pages = await queryAll(CLIENTS_DS, {
-    filter: { property: "Email", email: { equals: email.trim() } },
-  });
-  return pages
-    .map((page) => ({ client: toClient(page), loginAccess: text(page.properties["Login access"]) }))
-    .filter(({ client, loginAccess }) => client.portalEnabled && loginAccess);
-}
-
-/** Replaces the client's "Login access" (always with a hash). */
-export async function setLoginAccessInNotion(clientId: string, value: string): Promise<void> {
-  await notion(`/pages/${clientId}`, {
-    method: "PATCH",
-    body: { properties: { "Login access": { rich_text: [{ type: "text", text: { content: value } }] } } },
-  });
 }
 
 /** Sets the client's Status (a Notion status property). */
@@ -157,6 +140,83 @@ export const getClientPage = cache(async (clientId: string): Promise<Client | nu
     return null;
   }
 });
+
+// ── Portal Users ────────────────────────────────────
+// One row per person who can sign in: Name (title), Email, Client (relation),
+// Status (Active / Removed), Added by (select), Last signed in (date).
+
+function toPortalUser(page: Page): PortalUser {
+  const p = page.properties;
+  return {
+    id: page.id,
+    name: text(p["Name"]),
+    email: (p["Email"]?.email ?? "").trim(),
+    clientId: p["Client"]?.relation?.[0]?.id ?? "",
+    active: option(p["Status"]) === "Active",
+    addedBy: option(p["Added by"]) || undefined,
+    lastSignedIn: p["Last signed in"]?.date?.start ?? undefined,
+  };
+}
+
+/**
+ * Active users with this email, matched ignoring case. Notion's email filter is
+ * case-sensitive and rows are sometimes typed by hand, so compare here instead.
+ */
+export async function findActiveUsersByEmail(email: string): Promise<PortalUser[]> {
+  const wanted = email.trim().toLowerCase();
+  const pages = await queryAll(USERS_DS, { filter: { property: "Status", select: { equals: "Active" } } });
+  return pages
+    .filter((page) => !page.in_trash)
+    .map(toPortalUser)
+    .filter((u) => u.active && u.clientId && u.email.toLowerCase() === wanted);
+}
+
+/** A single user, but only if the page really lives in Portal Users. */
+export const getPortalUser = cache(async (userId: string): Promise<PortalUser | null> => {
+  try {
+    const page = await notion<Page>(`/pages/${userId}`);
+    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(USERS_DS)) return null;
+    return toPortalUser(page);
+  } catch {
+    return null;
+  }
+});
+
+/** Everyone who has (or had) access to this client, oldest first. */
+export async function queryClientUsers(clientId: string): Promise<PortalUser[]> {
+  const pages = await queryAll(USERS_DS, {
+    filter: { property: "Client", relation: { contains: clientId } },
+    sorts: [{ timestamp: "created_time", direction: "ascending" }],
+  });
+  return pages.filter((page) => !page.in_trash).map(toPortalUser);
+}
+
+export async function createPortalUserInNotion(user: { name: string; email: string; clientId: string; addedBy: string }): Promise<PortalUser> {
+  const page = await notion<Page>(`/pages`, {
+    method: "POST",
+    body: {
+      parent: { type: "data_source_id", data_source_id: USERS_DS },
+      properties: {
+        Name: { title: [{ type: "text", text: { content: user.name } }] },
+        Email: { email: user.email },
+        Client: { relation: [{ id: user.clientId }] },
+        Status: { select: { name: "Active" } },
+        "Added by": { select: { name: user.addedBy } },
+      },
+    },
+  });
+  return toPortalUser(page);
+}
+
+/** Writes only the Status property. */
+export async function setPortalUserStatusInNotion(userId: string, status: "Active" | "Removed"): Promise<void> {
+  await notion(`/pages/${userId}`, { method: "PATCH", body: { properties: { Status: { select: { name: status } } } } });
+}
+
+/** Writes only "Last signed in". */
+export async function setLastSignedInInNotion(userId: string, at: string): Promise<void> {
+  await notion(`/pages/${userId}`, { method: "PATCH", body: { properties: { "Last signed in": { date: { start: at } } } } });
+}
 
 // ── Tasks ───────────────────────────────────────────
 // Client Tasks fields used: Task (title), Client (relation), Status (select),
