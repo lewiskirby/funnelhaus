@@ -7,7 +7,7 @@ import { Icon } from "@/components/ui";
 const items = [
   { href: "/", label: "Home", icon: Icon.home },
   { href: "/tasks", label: "Tasks", icon: Icon.tasks },
-  { href: "/ads", label: "Ads", icon: Icon.megaphone },
+  { href: "/ads", label: "Ad creatives", icon: Icon.megaphone },
   { href: "/results", label: "Results", icon: Icon.chart },
   { href: "/team", label: "Team", icon: Icon.users },
 ] as const;

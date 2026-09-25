@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: PageProps<"/ads/[id]">): Prom
 
 const WHAT_TO_DO: Partial<Record<string, string>> = {
   review: "Read the script below. If you'd like any changes, tell us in your Slack channel or reply to any of our emails. Once you're happy, we'll get it ready to film.",
-  film: "Film this ad using the script below, then upload the footage to your Asset upload folder (linked on your Home page) and let us know.",
+  film: "Film this ad using the script below, then upload the footage to the Ad Creative Uploads folder inside your Asset upload folder (linked on your Home page) and let us know.",
 };
 
 export default async function AdPage({ params }: PageProps<"/ads/[id]">) {

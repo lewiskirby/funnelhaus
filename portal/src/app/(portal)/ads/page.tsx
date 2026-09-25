@@ -7,7 +7,7 @@ import { requireClient } from "@/lib/session";
 import type { AdCreative } from "@/lib/types";
 import { BoardScroller } from "./board-scroller";
 
-export const metadata: Metadata = { title: "Ads" };
+export const metadata: Metadata = { title: "Ad creatives" };
 
 const TONE = {
   overdue: "bg-brand-soft text-brand",
@@ -30,7 +30,7 @@ export default async function AdsPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Your ads</h1>
+        <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Ad creatives</h1>
         <p className="mt-2 text-[15px] text-muted">Every ad we&apos;re making for you, from script to live. Tap an ad to see the script.</p>
       </header>
 
@@ -119,7 +119,7 @@ function ComingSoon() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Your ads</h1>
+        <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Ad creatives</h1>
         <p className="mt-2 text-[15px] text-muted">Every ad we&apos;re making for you, from script to live.</p>
       </header>
 
