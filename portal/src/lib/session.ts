@@ -9,7 +9,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getClient, getClientForAdmin, getSignedInUser, listClientsForAdmin } from "@/lib/data";
+import { getClient, getClientForAdmin, getSignedInTeamMember, getSignedInUser, listClientsForAdmin } from "@/lib/data";
 import type { Client, PortalUser } from "@/lib/types";
 
 const COOKIE = "fh_session";
@@ -66,8 +66,9 @@ export async function createSession(userId: string, clientId: string) {
   await write({ userId, clientId }, CLIENT_MAX_AGE);
 }
 
-export async function createAdminSession(clientId?: string) {
-  await write({ admin: true, clientId }, ADMIN_MAX_AGE);
+/** `userId`: a FunnelHaus team member's Portal Users row (none for ADMIN_EMAIL). */
+export async function createAdminSession(clientId?: string, userId?: string) {
+  await write({ admin: true, clientId, userId }, ADMIN_MAX_AGE);
 }
 
 export async function destroySession() {
@@ -82,13 +83,16 @@ export const getSession = cache(async (): Promise<Session | null> => {
   if (!payload) return null;
 
   if (payload.admin) {
+    // FunnelHaus team members are re-checked on every request, like clients.
+    const user = payload.userId ? await getSignedInTeamMember(payload.userId) : undefined;
+    if (user === null) return null;
     // Admins can view any client; fall back to the first one if none is chosen.
     let client = payload.clientId ? await getClientForAdmin(payload.clientId) : null;
     if (!client) {
       const [first] = await listClientsForAdmin();
       client = first ? await getClientForAdmin(first.id) : null;
     }
-    return { client, isAdmin: true };
+    return { client, isAdmin: true, user };
   }
 
   // Re-checked on every request, so removing someone in Notion signs them out on their next click.
@@ -105,6 +109,11 @@ export async function requireClient(): Promise<Client> {
   const client = await getSessionClient();
   if (!client) redirect("/login");
   return client;
+}
+
+/** The signed-in FunnelHaus team member's row, if an admin session belongs to one. */
+export async function sessionUserId(): Promise<string | undefined> {
+  return (await getSession())?.user?.id;
 }
 
 /** Only for admin-only actions such as switching client. */

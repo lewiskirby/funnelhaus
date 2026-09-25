@@ -143,7 +143,8 @@ export const getClientPage = cache(async (clientId: string): Promise<Client | nu
 
 // ── Portal Users ────────────────────────────────────
 // One row per person who can sign in: Name (title), Email, Client (relation),
-// Status (Active / Removed), Added by (select), Last signed in (date).
+// Status (Active / Removed), Role (Client / FunnelHaus team), Added by (select),
+// Last signed in (date). FunnelHaus team rows have no Client and see every client.
 
 function toPortalUser(page: Page): PortalUser {
   const p = page.properties;
@@ -153,6 +154,7 @@ function toPortalUser(page: Page): PortalUser {
     email: (p["Email"]?.email ?? "").trim(),
     clientId: p["Client"]?.relation?.[0]?.id ?? "",
     active: option(p["Status"]) === "Active",
+    role: option(p["Role"]) === "FunnelHaus team" ? "FunnelHaus team" : "Client",
     addedBy: option(p["Added by"]) || undefined,
     lastSignedIn: p["Last signed in"]?.date?.start ?? undefined,
   };
@@ -168,7 +170,7 @@ export async function findActiveUsersByEmail(email: string): Promise<PortalUser[
   return pages
     .filter((page) => !page.in_trash)
     .map(toPortalUser)
-    .filter((u) => u.active && u.clientId && u.email.toLowerCase() === wanted);
+    .filter((u) => u.active && (u.clientId || u.role === "FunnelHaus team") && u.email.toLowerCase() === wanted);
 }
 
 /** A single user, but only if the page really lives in Portal Users. */
@@ -191,7 +193,22 @@ export async function queryClientUsers(clientId: string): Promise<PortalUser[]> 
   return pages.filter((page) => !page.in_trash).map(toPortalUser);
 }
 
-export async function createPortalUserInNotion(user: { name: string; email: string; clientId: string; addedBy: string }): Promise<PortalUser> {
+/** FunnelHaus team members (active or removed), oldest first. */
+export async function queryTeamMembers(): Promise<PortalUser[]> {
+  const pages = await queryAll(USERS_DS, {
+    filter: { property: "Role", select: { equals: "FunnelHaus team" } },
+    sorts: [{ timestamp: "created_time", direction: "ascending" }],
+  });
+  return pages.filter((page) => !page.in_trash).map(toPortalUser);
+}
+
+export async function createPortalUserInNotion(user: {
+  name: string;
+  email: string;
+  clientId?: string;
+  role?: PortalUser["role"];
+  addedBy: string;
+}): Promise<PortalUser> {
   const page = await notion<Page>(`/pages`, {
     method: "POST",
     body: {
@@ -199,8 +216,9 @@ export async function createPortalUserInNotion(user: { name: string; email: stri
       properties: {
         Name: { title: [{ type: "text", text: { content: user.name } }] },
         Email: { email: user.email },
-        Client: { relation: [{ id: user.clientId }] },
+        Client: { relation: user.clientId ? [{ id: user.clientId }] : [] },
         Status: { select: { name: "Active" } },
+        Role: { select: { name: user.role ?? "Client" } },
         "Added by": { select: { name: user.addedBy } },
       },
     },

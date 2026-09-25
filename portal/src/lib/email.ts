@@ -6,7 +6,8 @@ import "server-only";
 
 type PortalEmail =
   | { type: "code"; email: string; code: string }
-  | { type: "invite"; email: string; name: string; client_name: string; inviter: string };
+  | { type: "invite"; email: string; name: string; client_name: string; inviter: string }
+  | { type: "staff_invite"; email: string; name: string; inviter: string };
 
 export async function sendPortalEmail(message: PortalEmail): Promise<void> {
   const url = process.env.MAKE_PORTAL_EMAIL_WEBHOOK_URL;

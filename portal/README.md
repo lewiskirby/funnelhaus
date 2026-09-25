@@ -8,7 +8,7 @@ their own tasks, events, folders and this week's work. Notion stays the source o
 | Database | Used for |
 | --- | --- |
 | 👤 Client Database | Name, logo, Status, folder links |
-| 👥 Portal Users | Who can sign in: Name, Email, Client, Status (Active / Removed), Added by, Last signed in |
+| 👥 Portal Users | Who can sign in: Name, Email, Client, Role (Client / FunnelHaus team), Status (Active / Removed), Added by, Last signed in |
 | 🔌 Client Tasks | The client's tasks (Task, Client, Status, Client Response) and page content |
 | 📅 Client Events | "Coming up" on Home; clients can add events |
 | 📊 Project Management Tracker | "What we're working on this week" (skips "Hide from client") |
@@ -29,9 +29,11 @@ The Notion integration must have access to the FunnelHaus HQ page.
 
 There are no passwords. Someone enters their email, gets a 6-digit code (valid for 10 minutes, 5 tries) and stays
 signed in for 30 days (7 for admin). Anyone with an **Active** row in Portal Users, linked to an Onboarding or Active
-client, can sign in. `ADMIN_EMAIL` signs in as admin and can view every client.
+client, can sign in. `ADMIN_EMAIL` and Active rows with Role **FunnelHaus team** (no Client needed) sign in as admin
+and can view every client.
 
 - **Add someone:** add a row in Portal Users, or the client adds them from the portal's Team page.
+- **Add a FunnelHaus team member:** add a row with Role FunnelHaus team, or use the FunnelHaus team section of the Team page (admins only).
 - **Remove someone:** set their Status to Removed (or remove them on the Team page). They're signed out on their next click.
 - Code requests and wrong guesses are rate-limited per email and per IP address, shared across all servers via Upstash.
 

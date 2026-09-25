@@ -1,15 +1,17 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { addTeammateAction, removeTeammateAction } from "./actions";
+import { addTeamMemberAction, addTeammateAction, removeTeamMemberAction, removeTeammateAction } from "./actions";
 
 // 16px text on phones so iOS doesn't zoom in.
 const inputClass =
   "block min-h-12 w-full rounded-xl border border-line bg-white px-3.5 py-3 text-[16px] text-ink outline-none transition placeholder:text-faint focus:border-brand focus:ring-4 focus:ring-brand/10 sm:min-h-11 sm:py-2.5 sm:text-[14.5px]";
 
-export function AddTeammate({ maxName }: { maxName: number }) {
+/** `staff`: adds to the FunnelHaus team instead of this client's team. */
+export function AddTeammate({ maxName, staff = false }: { maxName: number; staff?: boolean }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const [state, action, pending] = useActionState(addTeammateAction, undefined);
+  const [state, action, pending] = useActionState(staff ? addTeamMemberAction : addTeammateAction, undefined);
+  const id = staff ? "staff" : "teammate";
 
   // Clear the form once someone has been added.
   useEffect(() => {
@@ -20,16 +22,16 @@ export function AddTeammate({ maxName }: { maxName: number }) {
     <form ref={formRef} action={action} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
         <div>
-          <label htmlFor="teammate-name" className="mb-1.5 block text-[13px] font-medium text-muted">
+          <label htmlFor={`${id}-name`} className="mb-1.5 block text-[13px] font-medium text-muted">
             Name
           </label>
-          <input id="teammate-name" name="name" required maxLength={maxName} autoComplete="off" placeholder="e.g. Alex Smith" className={inputClass} />
+          <input id={`${id}-name`} name="name" required maxLength={maxName} autoComplete="off" placeholder="e.g. Alex Smith" className={inputClass} />
         </div>
         <div>
-          <label htmlFor="teammate-email" className="mb-1.5 block text-[13px] font-medium text-muted">
+          <label htmlFor={`${id}-email`} className="mb-1.5 block text-[13px] font-medium text-muted">
             Email
           </label>
-          <input id="teammate-email" name="email" type="email" required autoComplete="off" placeholder="alex@yourbusiness.com" className={inputClass} />
+          <input id={`${id}-email`} name="email" type="email" required autoComplete="off" placeholder={staff ? "alex@funnelhaus.co" : "alex@yourbusiness.com"} className={inputClass} />
         </div>
       </div>
       {state?.error && (
@@ -47,13 +49,13 @@ export function AddTeammate({ maxName }: { maxName: number }) {
         disabled={pending}
         className="min-h-12 w-full rounded-full bg-brand px-6 text-[14.5px] font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60 sm:min-h-10 sm:w-auto"
       >
-        {pending ? "Adding…" : "Add teammate"}
+        {pending ? "Adding…" : staff ? "Add team member" : "Add teammate"}
       </button>
     </form>
   );
 }
 
-export function RemoveTeammate({ userId, name }: { userId: string; name: string }) {
+export function RemoveTeammate({ userId, name, staff = false }: { userId: string; name: string; staff?: boolean }) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string>();
   const [pending, startTransition] = useTransition();
@@ -86,7 +88,7 @@ export function RemoveTeammate({ userId, name }: { userId: string; name: string 
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
-              const result = await removeTeammateAction(userId);
+              const result = await (staff ? removeTeamMemberAction : removeTeammateAction)(userId);
               if (result.error) setError(result.error);
             })
           }

@@ -26,6 +26,7 @@ export interface PortalUser {
   email: string;
   clientId: string;
   active: boolean;
+  role: "Client" | "FunnelHaus team"; // FunnelHaus team members see every client and have no clientId
   addedBy?: string; // "Onboarding form" | "FunnelHaus" | "Client"
   lastSignedIn?: string; // ISO date-time
 }

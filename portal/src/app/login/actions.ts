@@ -34,7 +34,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (!result.ok) return { step: "code", email, error: result.error };
 
   if (result.account.kind === "admin") {
-    await createAdminSession();
+    await createAdminSession(undefined, result.account.userId);
+    if (result.account.userId) await recordSignIn(result.account.userId);
   } else {
     await createSession(result.account.userId, result.account.clientId);
     await recordSignIn(result.account.userId);

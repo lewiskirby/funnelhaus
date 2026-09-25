@@ -36,13 +36,14 @@ export async function getClient(clientId: string): Promise<Client | null> {
 
 // ── Signing in ──────────────────────────────────────
 // Everyone signs in with a code emailed to them. ADMIN_EMAIL (default
-// info@funnelhaus.co) is the admin, who can view every client. Everyone else
-// needs an Active row in Portal Users linked to an in-progress client.
+// info@funnelhaus.co) and Active "FunnelHaus team" rows in Portal Users sign in
+// as admin and can view every client. Everyone else needs an Active row linked
+// to an in-progress client.
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "info@funnelhaus.co").toLowerCase();
 
 export type SignInAccount =
-  | { kind: "admin"; email: string }
+  | { kind: "admin"; email: string; userId?: string } // userId: a FunnelHaus team row (none for ADMIN_EMAIL)
   | { kind: "user"; email: string; userId: string; clientId: string };
 
 /** Who this email signs in as, or null if it has no access. */
@@ -50,6 +51,8 @@ export async function findSignInAccount(email: string): Promise<SignInAccount | 
   const typed = email.trim();
   if (typed.toLowerCase() === ADMIN_EMAIL) return { kind: "admin", email: typed };
   const users = await notion.findActiveUsersByEmail(typed);
+  const staff = users.find((u) => u.role === "FunnelHaus team");
+  if (staff) return { kind: "admin", email: staff.email || typed, userId: staff.id };
   // An email on several clients signs in to the first one that's in progress.
   for (const user of users) {
     if (await getClient(user.clientId)) return { kind: "user", email: user.email || typed, userId: user.id, clientId: user.clientId };
@@ -60,7 +63,13 @@ export async function findSignInAccount(email: string): Promise<SignInAccount | 
 /** The signed-in person, if they still have access to this client. Checked on every request. */
 export async function getSignedInUser(userId: string, clientId: string): Promise<PortalUser | null> {
   const user = await notion.getPortalUser(userId);
-  return user?.active && sameId(user.clientId, clientId) ? user : null;
+  return user?.active && user.role === "Client" && sameId(user.clientId, clientId) ? user : null;
+}
+
+/** A signed-in FunnelHaus team member, if they're still on the team. Checked on every request. */
+export async function getSignedInTeamMember(userId: string): Promise<PortalUser | null> {
+  const user = await notion.getPortalUser(userId);
+  return user?.active && user.role === "FunnelHaus team" ? user : null;
 }
 
 /** Notes the sign-in in Notion; never blocks signing in. */
@@ -81,7 +90,12 @@ export const TEAM_NAME_MAX = 80;
 /** Everyone with access to this client, oldest first. */
 export async function getTeam(clientId: string): Promise<PortalUser[]> {
   const users = await notion.queryClientUsers(clientId);
-  return users.filter((u) => u.active && sameId(u.clientId, clientId));
+  return users.filter((u) => u.active && u.role === "Client" && sameId(u.clientId, clientId));
+}
+
+/** Active FunnelHaus team members, oldest first. */
+export async function getTeamMembers(): Promise<PortalUser[]> {
+  return (await notion.queryTeamMembers()).filter((u) => u.active);
 }
 
 export async function addTeammate(
@@ -100,11 +114,11 @@ export async function addTeammate(
 
   try {
     const everyone = await notion.queryClientUsers(client.id);
-    const existing = everyone.find((u) => u.email.toLowerCase() === cleanEmail);
+    const existing = everyone.find((u) => u.role === "Client" && u.email.toLowerCase() === cleanEmail);
     if (existing?.active) return { ok: false, error: "That person already has access." };
     // Someone removed earlier is simply switched back on.
     if (existing) await notion.setPortalUserStatusInNotion(existing.id, "Active");
-    else await notion.createPortalUserInNotion({ name: cleanName, email: cleanEmail, clientId: client.id, addedBy });
+    else await notion.createPortalUserInNotion({ name: cleanName, email: cleanEmail, clientId: client.id, role: "Client", addedBy });
   } catch {
     return { ok: false, error: "We couldn't add them just now. Please try again." };
   }
@@ -117,10 +131,49 @@ export async function addTeammate(
   return { ok: true };
 }
 
+/** Adds someone to the FunnelHaus team: they can sign in and see every client. Admin only. */
+export async function addTeamMember(inviterName: string, name: string, email: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cleanName = name.trim();
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanName) return { ok: false, error: "Please enter their name." };
+  if (cleanName.length > TEAM_NAME_MAX) return { ok: false, error: `Please keep the name under ${TEAM_NAME_MAX} characters.` };
+  if (!EMAIL_RE.test(cleanEmail)) return { ok: false, error: "Please enter a valid email address." };
+  if (cleanEmail === ADMIN_EMAIL) return { ok: false, error: "That email already has full access." };
+
+  try {
+    const existing = (await notion.queryTeamMembers()).find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existing?.active) return { ok: false, error: "They're already on the team." };
+    if (existing) await notion.setPortalUserStatusInNotion(existing.id, "Active");
+    else await notion.createPortalUserInNotion({ name: cleanName, email: cleanEmail, role: "FunnelHaus team", addedBy: "FunnelHaus" });
+  } catch {
+    return { ok: false, error: "We couldn't add them just now. Please try again." };
+  }
+
+  try {
+    await sendPortalEmail({ type: "staff_invite", email: cleanEmail, name: cleanName.split(/\s+/)[0], inviter: inviterName });
+  } catch (err) {
+    console.error("Team member welcome email failed", err); // they can still sign in
+  }
+  return { ok: true };
+}
+
+/** Takes someone off the FunnelHaus team. Admin only. */
+export async function removeTeamMember(userId: string, actingUserId?: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (actingUserId && sameId(actingUserId, userId)) return { ok: false, error: "You can't remove yourself." };
+  const user = await notion.getPortalUser(userId);
+  if (!user?.active || user.role !== "FunnelHaus team") return { ok: false, error: "We couldn't find that person." };
+  try {
+    await notion.setPortalUserStatusInNotion(userId, "Removed");
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't remove them just now. Please try again." };
+  }
+}
+
 export async function removeTeammate(clientId: string, userId: string, actingUserId?: string): Promise<{ ok: true } | { ok: false; error: string }> {
   if (actingUserId && sameId(actingUserId, userId)) return { ok: false, error: "You can't remove yourself." };
   const user = await notion.getPortalUser(userId);
-  if (!user?.active || !sameId(user.clientId, clientId)) return { ok: false, error: "We couldn't find that person." };
+  if (!user?.active || user.role !== "Client" || !sameId(user.clientId, clientId)) return { ok: false, error: "We couldn't find that person." };
   try {
     await notion.setPortalUserStatusInNotion(userId, "Removed");
     return { ok: true };
