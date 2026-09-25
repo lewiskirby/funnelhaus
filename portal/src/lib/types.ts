@@ -41,6 +41,7 @@ export interface ClientEvent {
   start: string; // ISO date, or date-time with offset
   end?: string;
   allDay: boolean;
+  editable?: boolean; // linked to this client only, so they may edit or delete it
 }
 
 // Page content from Notion, reduced to what the portal renders.

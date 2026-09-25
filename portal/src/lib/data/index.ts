@@ -264,8 +264,8 @@ export async function getClientEvents(clientId: string): Promise<ClientEvent[]> 
     const events = await notion.queryClientEvents(clientId);
     return events
       .filter((e) => e.clientIds.some((id) => sameId(id, clientId)))
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .map(({ clientIds, ...event }) => event);
+      // Events shared with other clients are read-only here.
+      .map(({ clientIds, ...event }) => ({ ...event, editable: clientIds.length === 1 }));
   } catch {
     return []; // Details are logged in notion.ts; Home still loads.
   }
@@ -275,21 +275,58 @@ export const EVENT_NAME_MAX = 120;
 // A date (all day) or a date-time with a UTC offset, e.g. 2026-10-01T19:00:00+02:00.
 const EVENT_START_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2}))?$/;
 
-export async function addClientEvent(clientId: string, name: string, start: string): Promise<{ ok: true } | { ok: false; error: string }> {
+type EventResult = { ok: true } | { ok: false; error: string };
+
+/** The cleaned-up name, or an error message for the client. */
+function checkEvent(name: string, start: string): { name: string } | { error: string } {
   const trimmed = name.trim();
-  if (!trimmed) return { ok: false, error: "Please give the event a name." };
-  if (trimmed.length > EVENT_NAME_MAX) return { ok: false, error: `Please keep the name under ${EVENT_NAME_MAX} characters.` };
+  if (!trimmed) return { error: "Please give the event a name." };
+  if (trimmed.length > EVENT_NAME_MAX) return { error: `Please keep the name under ${EVENT_NAME_MAX} characters.` };
   if (!EVENT_START_RE.test(start) || Number.isNaN(Date.parse(start.length === 10 ? `${start}T12:00:00Z` : start))) {
-    return { ok: false, error: "Please pick a valid date." };
+    return { error: "Please pick a valid date." };
   }
   if (start.slice(0, 10) < new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)) {
-    return { ok: false, error: "That date is in the past." };
+    return { error: "That date is in the past." };
   }
+  return { name: trimmed };
+}
+
+/** True only for an event linked to this client and no one else. */
+async function ownsEvent(clientId: string, eventId: string): Promise<boolean> {
+  const clientIds = await notion.getEventClientIds(eventId);
+  return clientIds?.length === 1 && sameId(clientIds[0], clientId);
+}
+
+export async function addClientEvent(clientId: string, name: string, start: string): Promise<EventResult> {
+  const checked = checkEvent(name, start);
+  if ("error" in checked) return { ok: false, error: checked.error };
   try {
-    await notion.createEventInNotion(clientId, trimmed, start);
+    await notion.createEventInNotion(clientId, checked.name, start);
     return { ok: true };
   } catch {
     return { ok: false, error: "We couldn't add this event. Please try again." };
+  }
+}
+
+export async function updateClientEvent(clientId: string, eventId: string, name: string, start: string): Promise<EventResult> {
+  const checked = checkEvent(name, start);
+  if ("error" in checked) return { ok: false, error: checked.error };
+  if (!(await ownsEvent(clientId, eventId))) return { ok: false, error: "This event can't be changed here." };
+  try {
+    await notion.updateEventInNotion(eventId, checked.name, start);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't save this event. Please try again." };
+  }
+}
+
+export async function deleteClientEvent(clientId: string, eventId: string): Promise<EventResult> {
+  if (!(await ownsEvent(clientId, eventId))) return { ok: false, error: "This event can't be deleted here." };
+  try {
+    await notion.trashEventInNotion(eventId);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't delete this event. Please try again." };
   }
 }
 

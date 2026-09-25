@@ -24,7 +24,8 @@ function parts(event: ClientEvent, timeZone: string) {
   };
 }
 
-export function EventRow({ event }: { event: ClientEvent }) {
+/** One upcoming event. With `onEdit`, the whole row is a button that opens it for editing. */
+export function EventRow({ event, onEdit }: { event: ClientEvent; onEdit?: () => void }) {
   // Server render uses Berlin; the browser swaps in the viewer's own time zone.
   const timeZone = useSyncExternalStore(
     noopSubscribe,
@@ -33,19 +34,34 @@ export function EventRow({ event }: { event: ClientEvent }) {
   );
   const p = parts(event, timeZone);
 
-  return (
-    <li className="flex items-center gap-4">
+  const body = (
+    <>
       <div className="flex w-12 shrink-0 flex-col items-center rounded-xl bg-white py-1.5 ring-1 ring-line">
         <span className="text-[10px] font-semibold text-brand">{p.month}</span>
         <span className="text-[17px] leading-tight font-bold text-ink">{p.day}</span>
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-medium text-ink">{event.name}</p>
         <p className="text-[12.5px] text-muted">
           {p.relative}
           {p.time && <> · {p.time}</>}
         </p>
       </div>
+    </>
+  );
+
+  if (!onEdit) return <li className="flex items-center gap-4">{body}</li>;
+  return (
+    <li className="-mx-2">
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit ${event.name}`}
+        className="group flex w-full items-center gap-4 rounded-xl px-2 py-1.5 text-left transition hover:bg-canvas active:bg-canvas"
+      >
+        {body}
+        <span className="shrink-0 text-[12.5px] font-medium text-faint transition group-hover:text-brand">Edit</span>
+      </button>
     </li>
   );
 }

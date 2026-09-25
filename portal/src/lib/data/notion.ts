@@ -293,6 +293,35 @@ export async function createEventInNotion(clientId: string, name: string, start:
   });
 }
 
+/** The clients an event is linked to, or null if the page isn't an event. */
+export async function getEventClientIds(eventId: string): Promise<string[] | null> {
+  try {
+    const page = await notion<Page>(`/pages/${eventId}`);
+    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(EVENTS_DS)) return null;
+    return (page.properties["Client"]?.relation ?? []).map((r) => r.id);
+  } catch {
+    return null;
+  }
+}
+
+/** Changes only an event's Name and Date. */
+export async function updateEventInNotion(eventId: string, name: string, start: string): Promise<void> {
+  await notion(`/pages/${eventId}`, {
+    method: "PATCH",
+    body: {
+      properties: {
+        Name: { title: [{ type: "text", text: { content: name } }] },
+        Date: { date: { start } },
+      },
+    },
+  });
+}
+
+/** Moves an event to Notion's trash, where it can still be restored for 30 days. */
+export async function trashEventInNotion(eventId: string): Promise<void> {
+  await notion(`/pages/${eventId}`, { method: "PATCH", body: { in_trash: true } });
+}
+
 // ── Project Management Tracker ──────────────────────
 // Only the Task title leaves the server; Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.

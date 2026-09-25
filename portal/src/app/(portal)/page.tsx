@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { AddEvent } from "@/components/add-event";
-import { EventRow } from "@/components/event-row";
+import { Events } from "@/components/events";
 import { StatusToggle } from "@/components/task-status";
 import { Icon, ProgressBar, SectionHeading } from "@/components/ui";
 import { EVENT_NAME_MAX, getClientEvents, getClientTasks, getUpcomingWork } from "@/lib/data";
@@ -162,16 +161,7 @@ export default async function HomePage() {
 
         <section className="card p-6 lg:col-span-2">
           <SectionHeading title="Coming up" />
-          {upcoming.length === 0 ? (
-            <p className="text-[14px] text-muted">No upcoming dates yet.</p>
-          ) : (
-            <ol className="space-y-5">
-              {upcoming.map((e) => (
-                <EventRow key={e.id} event={e} />
-              ))}
-            </ol>
-          )}
-          <AddEvent maxName={EVENT_NAME_MAX} />
+          <Events events={upcoming} maxName={EVENT_NAME_MAX} />
         </section>
       </div>
 
