@@ -47,7 +47,7 @@ export default async function HomePage() {
               <p className="text-[40px] leading-none font-bold tracking-[-0.03em]">
                 {done} <span className="text-white/35">of {tasks.length}</span>
               </p>
-              <p className="mt-2 mb-6 text-[15px] text-white/55">tasks complete — the sooner these are done, the sooner we launch.</p>
+              <p className="mt-2 mb-6 text-[15px] text-white/55">tasks complete. The sooner these are done, the sooner we launch.</p>
               <ProgressBar value={done / tasks.length} className="max-w-md" />
             </div>
 
@@ -86,7 +86,7 @@ export default async function HomePage() {
           {open.length === 0 ? (
             <div className="flex items-center gap-3 rounded-2xl bg-success-soft px-4 py-4 text-[14px] text-success">
               <Icon.check className="size-5" strokeWidth={2} />
-              {tasks.length ? "You're all caught up. Nice work." : "No tasks yet — we'll add them here."}
+              {tasks.length ? "You're all caught up. Nice work." : "No tasks yet. We'll add them here."}
             </div>
           ) : (
             <ul className="-mx-2">

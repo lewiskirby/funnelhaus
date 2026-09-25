@@ -91,7 +91,7 @@ export default async function TasksPage() {
             <span className="flex size-9 items-center justify-center rounded-full bg-success-soft">
               <Icon.check className="size-5" strokeWidth={2} />
             </span>
-            {tasks.length ? "All done here. We'll add new tasks as the project moves forward." : "No tasks yet — we'll add them here."}
+            {tasks.length ? "All done here. We'll add new tasks as the project moves forward." : "No tasks yet. We'll add them here."}
           </div>
         ) : (
           <div className="space-y-6">
