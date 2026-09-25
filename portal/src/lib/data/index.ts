@@ -8,7 +8,7 @@ import { cache } from "react";
 import * as notion from "./notion";
 import { sendPortalEmail } from "@/lib/email";
 import { ANSWER_MAX } from "@/lib/limits";
-import type { Client, ClientEvent, ContentBlock, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, Client, ClientEvent, ContentBlock, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete"];
@@ -440,6 +440,37 @@ export async function deleteClientEvent(clientId: string, eventId: string): Prom
   } catch {
     return { ok: false, error: "We couldn't delete this event. Please try again." };
   }
+}
+
+// ── Ads ─────────────────────────────────────────────
+// Only ads whose Client relation includes this client are ever returned.
+
+function toClientAd(record: AdCreative & { clientIds: string[] }): AdCreative {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { clientIds, ...ad } = record;
+  return ad;
+}
+
+export async function getClientAds(clientId: string): Promise<AdCreative[]> {
+  try {
+    const ads = await notion.queryClientAds(clientId);
+    return ads.filter((ad) => ad.clientIds.some((id) => sameId(id, clientId))).map(toClientAd);
+  } catch {
+    return []; // Details are logged in notion.ts.
+  }
+}
+
+/** One ad and its page content (e.g. the script), if it belongs to this client. */
+export async function getClientAd(clientId: string, adId: string): Promise<{ ad: AdCreative; content: ContentBlock[] } | null> {
+  const ad = await notion.getAdPage(adId);
+  if (!ad || !ad.clientIds.some((id) => sameId(id, clientId))) return null;
+  let content: ContentBlock[] = [];
+  try {
+    content = await notion.getPageContent(adId, { fresh: true });
+  } catch {
+    // Show the ad without its content rather than failing.
+  }
+  return { ad: toClientAd(ad), content };
 }
 
 // ── What FunnelHaus is working on ───────────────────

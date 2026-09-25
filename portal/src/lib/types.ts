@@ -46,6 +46,18 @@ export interface TaskRecord extends Task {
   templateId?: string; // Task Templates page this task was created from
 }
 
+// An ad from the Ad Creatives database, as a client sees it on their Ads board.
+export type AdStage = "planned" | "review" | "film" | "editing" | "launch" | "live";
+export interface AdCreative {
+  id: string;
+  name: string; // "Ad ID" in Notion
+  stage: AdStage;
+  format?: string;
+  lengthSeconds?: string;
+  due?: string; // ISO date
+  driveUrl?: string;
+}
+
 // An entry in the Client Events database (webinars, calls, launches…).
 export interface ClientEvent {
   id: string;

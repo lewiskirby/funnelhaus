@@ -3,7 +3,7 @@
 
 import "server-only";
 import { cache } from "react";
-import type { Client, ClientEvent, ClientIcon, ContentBlock, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, AdStage, Client, ClientEvent, ClientIcon, ContentBlock, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -14,6 +14,7 @@ export const EVENTS_DS = process.env.NOTION_EVENTS_DS ?? "3e404bbf-db00-8058-8f6
 const CONTENT_TTL_MS = 60_000; // how long page content and template icons are cached
 export const TRACKER_DS = process.env.NOTION_TRACKER_DS ?? "3c104bbf-db00-802e-b3e3-000bba4c7e16";
 export const USERS_DS = process.env.NOTION_USERS_DS ?? "cbac4674-b2ff-472e-8057-dfe82c253644";
+export const ADS_DS = process.env.NOTION_ADS_DS ?? "a3304bbf-db00-83b0-b86f-870de7f1283e";
 
 // ── HTTP ────────────────────────────────────────────
 
@@ -398,6 +399,61 @@ export async function updateEventInNotion(eventId: string, name: string, start: 
 /** Moves an event to Notion's trash, where it can still be restored for 30 days. */
 export async function trashEventInNotion(eventId: string): Promise<void> {
   await notion(`/pages/${eventId}`, { method: "PATCH", body: { in_trash: true } });
+}
+
+// ── Ad Creatives ────────────────────────────────────
+// Fields used: Ad ID (title), Client (relation), Status (status), Ad Format,
+// Length (Sec), Due date, File Drive Link. Performance data (ROAS, CTR, tags,
+// notes) is internal and never read. Rejected and Unused ads are never shown.
+
+// Notion statuses grouped into the columns a client sees.
+const AD_STAGES: Record<string, AdStage> = {
+  "Not started": "planned",
+  Scripting: "planned",
+  "Script review": "review",
+  "Ready to film": "film",
+  Filmed: "editing",
+  Editing: "editing",
+  "Ready for upload": "launch",
+  Live: "live",
+};
+
+type AdRecord = AdCreative & { clientIds: string[] };
+
+function toAd(page: Page): AdRecord | null {
+  const p = page.properties;
+  const stage = AD_STAGES[option(p["Status"]) || "Not started"];
+  if (!stage) return null; // Rejected, Unused or an unknown status
+  return {
+    id: page.id,
+    name: text(p["Ad ID"]) || "Untitled ad",
+    stage,
+    format: option(p["Ad Format"]) || undefined,
+    lengthSeconds: text(p["Length (Sec)"]) || undefined,
+    due: p["Due date"]?.date?.start ?? undefined,
+    driveUrl: safeUrl(p["File Drive Link"]?.url),
+    clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
+  };
+}
+
+/** This client's ads that are in production or live. */
+export async function queryClientAds(clientId: string): Promise<AdRecord[]> {
+  const pages = await queryAll(ADS_DS, {
+    filter: { property: "Client", relation: { contains: clientId } },
+    sorts: [{ timestamp: "created_time", direction: "ascending" }],
+  });
+  return pages.filter((page) => !page.in_trash).map(toAd).filter((ad): ad is AdRecord => ad !== null);
+}
+
+/** A single ad, but only if the page really lives in Ad Creatives and isn't hidden. */
+export async function getAdPage(adId: string): Promise<AdRecord | null> {
+  try {
+    const page = await notion<Page>(`/pages/${adId}`);
+    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(ADS_DS)) return null;
+    return toAd(page);
+  } catch {
+    return null;
+  }
 }
 
 // ── Project Management Tracker ──────────────────────
