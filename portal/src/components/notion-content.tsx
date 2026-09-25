@@ -258,6 +258,10 @@ export function Blocks({ blocks, taskId }: { blocks: ContentBlock[]; taskId?: st
  */
 export function NotionContent({ blocks, taskId }: { blocks: ContentBlock[]; taskId?: string }) {
   const translations = blocks.filter((b): b is Extract<ContentBlock, { type: "translation" }> => b.type === "translation");
+  // Everything above the language row in Notion (e.g. an intro video) is shared by every language.
+  const split = blocks.findIndex((b) => b.type === "translation");
+  const shared = split > 0 ? blocks.slice(0, split) : [];
+  const english = split > 0 ? blocks.slice(split) : blocks;
   const main = (
     <>
       {taskId && hasAnswerTable(blocks) && (
@@ -266,13 +270,14 @@ export function NotionContent({ blocks, taskId }: { blocks: ContentBlock[]; task
           Type your answers below. Everything saves automatically, so you can come back and finish later.
         </p>
       )}
-      <Blocks blocks={blocks} taskId={taskId} />
+      <Blocks blocks={translations.length ? english : blocks} taskId={taskId} />
     </>
   );
   return (
     <div className="space-y-4 text-[16px] leading-relaxed text-body">
       {translations.length ? (
         <LanguageTabs
+          shared={shared.length ? <Blocks blocks={shared} taskId={taskId} /> : undefined}
           tabs={[
             { flag: "🇬🇧", label: "English", content: main },
             ...translations.map((t) => ({ flag: t.flag, label: t.label, content: <Blocks blocks={t.blocks} /> })),

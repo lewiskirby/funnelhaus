@@ -4,8 +4,11 @@ import { useEffect, useState, type ReactNode } from "react";
 
 const STORAGE_KEY = "fh-language";
 
-/** Flag buttons that switch a task between its original and translated versions. Remembers the choice. */
-export function LanguageTabs({ tabs }: { tabs: { flag: string; label: string; content: ReactNode }[] }) {
+/**
+ * Flag buttons that switch a task between its original and translated versions. Remembers the choice.
+ * `shared` (e.g. a video above the language row in Notion) shows in every language.
+ */
+export function LanguageTabs({ tabs, shared }: { tabs: { flag: string; label: string; content: ReactNode }[]; shared?: ReactNode }) {
   const [active, setActive] = useState(tabs[0].flag);
 
   // Restore the viewer's last choice after the page has loaded.
@@ -43,6 +46,7 @@ export function LanguageTabs({ tabs }: { tabs: { flag: string; label: string; co
           </button>
         ))}
       </div>
+      {shared}
       {tabs.map((t) => (
         <div key={t.flag} role="tabpanel" hidden={active !== t.flag} className="space-y-4">
           {t.content}
