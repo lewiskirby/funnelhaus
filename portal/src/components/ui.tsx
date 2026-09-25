@@ -57,8 +57,8 @@ export const Icon = {
   tasks: (p: IconProps) => (
     <svg {...base(p)}><path d="M8 5h9M8 10h9M8 15h9" /><path d="m2.5 5 1.2 1.2L6 4M2.5 10l1.2 1.2L6 9M2.5 15l1.2 1.2L6 14" /></svg>
   ),
-  wand: (p: IconProps) => (
-    <svg {...base(p)}><path d="M3.5 16.5 12 8" /><path d="m11 6.5 2.5 2.5" /><path d="M14.5 2.5v2M14.5 7.5v2M11 6h-2M20 6h-2M16.8 3.7l-1.1 1.1M16.8 8.3l-1.1-1.1" /></svg>
+  megaphone: (p: IconProps) => (
+    <svg {...base(p)}><path d="M3 8.5v3a1 1 0 0 0 1 1h2l7 3.5V4L6 7.5H4a1 1 0 0 0-1 1Z" /><path d="m6 12.5 1 4.5h2l-.8-3.7" /><path d="M16 7.5a3 3 0 0 1 0 5" /></svg>
   ),
   users: (p: IconProps) => (
     <svg {...base(p)}><circle cx="7.5" cy="7" r="3" /><path d="M2 16.5c0-2.8 2.5-4.5 5.5-4.5s5.5 1.7 5.5 4.5" /><path d="M13 4.2a3 3 0 0 1 0 5.6M15 12.3c1.8.6 3 2 3 4.2" /></svg>
