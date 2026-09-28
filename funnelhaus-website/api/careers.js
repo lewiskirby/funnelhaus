@@ -175,7 +175,6 @@ h1{font-size:clamp(30px,5vw,50px);font-weight:700;letter-spacing:-.03em;line-hei
 .content details>*+*{margin-top:10px}
 .callout{display:flex;gap:12px;background:var(--off-white);border-radius:16px;padding:16px 18px}
 .callout-icon{font-size:20px;line-height:1.4}
-.cta{margin-top:30px}
 .cta-end{text-align:center;margin-top:40px}
 .modal{position:fixed;inset:0;z-index:50;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;background:rgba(17,17,17,.55);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal:target,.modal.open{display:flex}
@@ -300,7 +299,6 @@ function jobPage(job, blocks, applied) {
   <header class="hero">
     <h1>${esc(job.title)}</h1>
     ${job.details.length ? `<div class="details">${job.details.map(([label, value]) => `<p><strong>${esc(label)}:</strong> ${esc(value)}</p>`).join('')}</div>` : ''}
-    <div class="cta"><a class="btn btn-primary btn-lg" href="#apply">Apply now</a></div>
   </header>
   ${video ? `<div class="hero-video">${videoFrame(video, job.title)}</div>` : ''}
   ${blocks.length ? `<article class="card content">${renderBlocks(blocks)}</article>` : ''}
