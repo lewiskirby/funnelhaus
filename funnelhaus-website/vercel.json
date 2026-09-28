@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/careers/:slug", "destination": "/api/careers?slug=:slug" }
+  ]
+}
