@@ -146,8 +146,8 @@ nav{position:sticky;top:0;z-index:10;background:rgba(255,254,250,.85);backdrop-f
 .btn-primary{background:var(--red);color:#fff}
 .btn-primary:hover{background:var(--red-dark)}
 .btn-primary:disabled{opacity:.6;cursor:wait}
-header.hero{padding:64px 0 36px;text-align:center}
-h1{font-size:clamp(30px,5vw,50px);font-weight:700;letter-spacing:-.03em;line-height:1.1;color:var(--dark);max-width:760px;margin:0 auto;overflow-wrap:break-word}
+header.hero{padding:64px 0 36px;text-align:left}
+h1{font-size:clamp(30px,5vw,50px);font-weight:700;letter-spacing:-.03em;line-height:1.1;color:var(--dark);max-width:760px;margin:0;overflow-wrap:break-word}
 .details{margin-top:22px;display:flex;flex-direction:column;gap:4px;font-size:16px;color:var(--muted)}
 .details strong{font-weight:600;color:var(--dark)}
 .hero .btn{margin-top:28px}
@@ -180,7 +180,7 @@ h1{font-size:clamp(30px,5vw,50px);font-weight:700;letter-spacing:-.03em;line-hei
 .modal{position:fixed;inset:0;z-index:50;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;background:rgba(17,17,17,.55);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal:target,.modal.open{display:flex}
 .modal-box{position:relative;width:100%;max-width:640px;margin:auto 0;background:var(--white);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,.25);padding:40px 44px}
-.modal-box h2{font-size:clamp(22px,3vw,28px);font-weight:700;letter-spacing:-.025em;line-height:1.2;color:var(--dark);padding-right:36px}
+.modal-box h2{margin-bottom:28px;font-size:clamp(22px,3vw,28px);font-weight:700;letter-spacing:-.025em;line-height:1.2;color:var(--dark);padding-right:36px}
 .modal-box .sub{color:var(--muted);margin:6px 0 28px}
 .close{position:absolute;top:18px;right:18px;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;color:var(--muted);text-decoration:none;font-size:24px;line-height:1}
 .close:hover{background:var(--off-white);color:var(--dark)}
@@ -278,13 +278,11 @@ function jobPage(job, blocks, applied) {
       <input type="hidden" name="slug" value="${esc(job.slug)}">
       <div class="hp" aria-hidden="true"><label>Company website <input type="text" name="company_website" tabindex="-1" autocomplete="off"></label></div>
       <div class="field"><label for="name">Name</label><input type="text" id="name" name="name" required maxlength="100" autocomplete="name"></div>
-      <div class="row" style="margin-top:22px">
-        <div class="field"><label for="email">Email</label><input type="email" id="email" name="email" required maxlength="320" autocomplete="email"></div>
-        <div class="field"><label for="phone">Phone</label><input type="tel" id="phone" name="phone" required maxlength="40" autocomplete="tel"></div>
-      </div>
-      <div class="field"><label for="cv">CV <span class="opt">(optional, PDF or Word, up to 4MB)</span></label><input type="file" id="cv" name="cv" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></div>
-      <div class="field"><label for="link">LinkedIn, portfolio or website <span class="opt">(optional)</span></label><input type="text" id="link" name="link" maxlength="500" inputmode="url" placeholder="linkedin.com/in/…"></div>
-      <div class="field"><label for="loom">Your Loom video</label><p class="hint">Please attach a short (2 to 5 minute) Loom video introducing yourself, discussing your experience, and sharing why you would be a good fit for this role in particular.</p><input type="url" id="loom" name="loom" required maxlength="500" placeholder="https://www.loom.com/share/…"></div>
+      <div class="field"><label for="email">Email</label><input type="email" id="email" name="email" required maxlength="320" autocomplete="email"></div>
+      <div class="field"><label for="phone">Phone</label><input type="tel" id="phone" name="phone" required maxlength="40" autocomplete="tel"></div>
+      <div class="field"><label for="cv">CV <span class="opt">(optional)</span></label><input type="file" id="cv" name="cv" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></div>
+      <div class="field"><label for="link">LinkedIn, Portfolio or Website <span class="opt">(optional)</span></label><input type="text" id="link" name="link" maxlength="500" inputmode="url" placeholder="linkedin.com/in/…"></div>
+      <div class="field"><label for="loom">Please attach a short (2- to 5-minute) Loom video introducing yourself, discussing your experience, and sharing why you would be a good fit for this role in particular</label><input type="url" id="loom" name="loom" required maxlength="500" placeholder="https://www.loom.com/share/…"></div>
       <fieldset class="field" style="border:0"><legend style="display:block;font-size:15px;font-weight:600;color:var(--dark);margin-bottom:8px">Do the availability requirements shared suit you?</legend>
         <div class="choices"><label><input type="radio" name="availability" value="Yes" required> Yes</label><label><input type="radio" name="availability" value="No"> No</label></div>
       </fieldset>
@@ -312,7 +310,6 @@ function jobPage(job, blocks, applied) {
   <div class="modal-box">
     <a class="close" href="#" aria-label="Close">×</a>
     <h2 id="apply-title">Apply for this role</h2>
-    <p class="sub">${esc(job.title)}</p>
     <div id="apply-body">${applied ? SUCCESS : form}</div>
     <template id="sent">${SUCCESS}</template>
   </div>
@@ -355,6 +352,6 @@ module.exports = async (req, res) => {
   }
 
   // Cached at Vercel's edge for a minute. Notion's image links last an hour, so this stays well inside that.
-  res.setHeader('Cache-Control', applied ? 'no-store' : 'public, s-maxage=60, stale-while-revalidate=300');
+  res.setHeader('Cache-Control', applied ? 'no-store' : 'public, s-maxage=30, stale-while-revalidate=30');
   return res.status(200).send(jobPage(job, blocks, applied));
 };
