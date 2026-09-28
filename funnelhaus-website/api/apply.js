@@ -3,8 +3,8 @@
 
 const { findLiveJob, uploadFile, createApplicant } = require('./_notion');
 
-const LIMITS = { name: 100, email: 320, phone: 40, link: 500, message: 5000 };
-const REQUIRED = ['name', 'email', 'message'];
+const LIMITS = { name: 100, email: 320, phone: 40, link: 500, loom: 500, availability: 3, message: 5000 };
+const REQUIRED = ['name', 'email', 'phone', 'loom', 'availability'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CV_MAX_BYTES = 4 * 1024 * 1024; // Vercel accepts up to 4.5MB per request
 const CV_TYPES = [
@@ -62,10 +62,21 @@ module.exports = async (req, res) => {
     if (data[key].length > max) return fail(400, 'One of your answers is too long. Please shorten it and try again.');
   }
   for (const key of REQUIRED) {
-    if (!data[key]) return fail(400, 'Please fill in your name, email and why you are a great fit.');
+    if (!data[key]) return fail(400, 'Please fill in your name, email, phone, Loom video and availability.');
   }
   data.email = data.email.toLowerCase();
   if (!EMAIL_RE.test(data.email)) return fail(400, 'Please enter a valid email address.');
+  if (!['Yes', 'No'].includes(data.availability)) return fail(400, 'Please say whether the availability requirements suit you.');
+  const toUrl = (value) => {
+    const url = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      return new URL(url).href;
+    } catch {
+      return '';
+    }
+  };
+  data.loom = toUrl(data.loom);
+  if (!data.loom) return fail(400, 'Please check your Loom video link.');
   if (data.link) {
     if (!/^https?:\/\//i.test(data.link)) data.link = `https://${data.link}`;
     try {
@@ -87,7 +98,7 @@ module.exports = async (req, res) => {
     if (!job) return fail(400, "This role isn't taking applications any more.");
     const cvName = hasCv ? (cv.name || 'CV').slice(0, 100) : undefined;
     const cvUploadId = hasCv ? await uploadFile(Buffer.from(await cv.arrayBuffer()), cvName, cv.type) : undefined;
-    await createApplicant({ jobId: job.id, ...data, cvUploadId, cvName });
+    await createApplicant(job, { ...data, cvUploadId, cvName });
   } catch (err) {
     console.error('Application failed', err);
     return fail(502, "We couldn't send your application. Please try again, or email info@funnelhaus.co.");

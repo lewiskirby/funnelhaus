@@ -175,14 +175,27 @@ h1{font-size:clamp(30px,5vw,50px);font-weight:700;letter-spacing:-.03em;line-hei
 .content details>*+*{margin-top:10px}
 .callout{display:flex;gap:12px;background:var(--off-white);border-radius:16px;padding:16px 18px}
 .callout-icon{font-size:20px;line-height:1.4}
-#apply{margin-top:48px;scroll-margin-top:84px}
-#apply h2{font-size:clamp(24px,3.4vw,32px);font-weight:700;letter-spacing:-.025em;color:var(--dark)}
-#apply .sub{color:var(--muted);margin:6px 0 30px}
+.cta{margin-top:30px}
+.cta-end{text-align:center;margin-top:40px}
+.modal{position:fixed;inset:0;z-index:50;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;background:rgba(17,17,17,.55);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.modal:target,.modal.open{display:flex}
+.modal-box{position:relative;width:100%;max-width:640px;margin:auto 0;background:var(--white);border-radius:24px;box-shadow:0 30px 80px rgba(0,0,0,.25);padding:40px 44px}
+.modal-box h2{font-size:clamp(22px,3vw,28px);font-weight:700;letter-spacing:-.025em;line-height:1.2;color:var(--dark);padding-right:36px}
+.modal-box .sub{color:var(--muted);margin:6px 0 28px}
+.close{position:absolute;top:18px;right:18px;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;color:var(--muted);text-decoration:none;font-size:24px;line-height:1}
+.close:hover{background:var(--off-white);color:var(--dark)}
+body.modal-open{overflow:hidden}
+.choices{display:flex;gap:10px}
+.choices label{flex:1;display:flex;align-items:center;gap:10px;font-weight:500;margin:0;background:var(--cream);border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:12px 14px;cursor:pointer}
+.choices label:has(input:checked){border-color:var(--red);box-shadow:0 0 0 4px var(--red-faint)}
+.choices input{accent-color:var(--red)}
+.hint{font-size:13.5px;font-weight:400;color:var(--muted);margin:-4px 0 10px;line-height:1.5}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:22px 18px}
 .field+.field,.row+.field,.field+.row{margin-top:22px}
+.row .field+.field{margin-top:0}
 label{display:block;font-size:15px;font-weight:600;color:var(--dark);letter-spacing:-.01em;margin-bottom:8px}
 label .opt{font-weight:400;color:var(--light)}
-input[type=text],input[type=email],input[type=tel],textarea{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--cream);border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:12px 14px;transition:border-color .18s,box-shadow .18s}
+input[type=text],input[type=email],input[type=tel],input[type=url],textarea{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--cream);border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:12px 14px;transition:border-color .18s,box-shadow .18s}
 input:focus,textarea:focus{outline:0;border-color:var(--red);box-shadow:0 0 0 4px var(--red-faint)}
 textarea{min-height:130px;resize:vertical;line-height:1.55}
 input[type=file]{font:inherit;font-size:14px;color:var(--muted);width:100%}
@@ -195,16 +208,27 @@ input[type=file]::file-selector-button{font:inherit;font-weight:600;font-size:14
 .tick{flex:none;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--green);color:#fff;font-weight:700}
 footer{padding:48px 0 56px;text-align:center;font-size:13.5px;color:var(--light)}
 footer a{color:var(--muted);text-decoration:none;font-weight:500}
-@media (max-width:640px){header.hero{padding:44px 0 28px}.card{padding:28px 22px;border-radius:22px}.row{grid-template-columns:1fr}.btn-lg{width:100%}}
+@media (max-width:640px){header.hero{padding:44px 0 28px}.card{padding:28px 22px;border-radius:22px}.row{grid-template-columns:1fr}.btn-lg{width:100%}.modal{padding:0}.modal-box{border-radius:0;min-height:100%;padding:28px 20px 36px}.choices{flex-direction:column}}
 `;
 
-// Sends the form with fetch so the page doesn't reload; without JS it posts normally.
+// Opens the application pop-up, and sends the form with fetch so the page
+// doesn't reload. Without JS the pop-up still opens (via #apply) and posts normally.
 const SCRIPT = `
 (function(){
-  var form=document.getElementById('apply-form');if(!form)return;
+  var modal=document.getElementById('apply');if(!modal)return;
+  var form=document.getElementById('apply-form');
+  function open(e){if(e)e.preventDefault();modal.classList.add('open');document.body.classList.add('modal-open');var f=modal.querySelector('input:not([type=hidden]):not([tabindex="-1"])');if(f)setTimeout(function(){f.focus()},30);}
+  function close(e){if(e)e.preventDefault();modal.classList.remove('open');document.body.classList.remove('modal-open');if(location.hash==='#apply')history.replaceState(null,'',location.pathname+location.search);}
+  document.querySelectorAll('a[href="#apply"]').forEach(function(a){a.addEventListener('click',open);});
+  modal.querySelector('.close').addEventListener('click',close);
+  modal.addEventListener('click',function(e){if(e.target===modal)close();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&modal.classList.contains('open'))close();});
+  if(location.hash==='#apply')open();
+  if(!form)return;
   var err=form.querySelector('.error'),btn=form.querySelector('button[type=submit]');
   form.addEventListener('submit',function(e){
     e.preventDefault();err.hidden=true;
+    if(!form.checkValidity()){form.reportValidity();return;}
     var cv=form.cv.files[0];
     if(cv&&cv.size>4*1024*1024){err.textContent='Your CV is over 4MB. Please upload a smaller file.';err.hidden=false;return;}
     btn.disabled=true;btn.textContent='Sending…';
@@ -250,17 +274,21 @@ function jobPage(job, blocks, applied) {
   const firstText = blocks.find((b) => b.type === 'paragraph' && (b.paragraph.rich_text || []).length);
   const description = firstText ? firstText.paragraph.rich_text.map((t) => t.plain_text).join('').trim().slice(0, 160) : '';
   const form = `
-    <form id="apply-form" action="/api/apply" method="POST" enctype="multipart/form-data" novalidate>
+    <form id="apply-form" action="/api/apply" method="POST" enctype="multipart/form-data">
       <input type="hidden" name="slug" value="${esc(job.slug)}">
       <div class="hp" aria-hidden="true"><label>Company website <input type="text" name="company_website" tabindex="-1" autocomplete="off"></label></div>
-      <div class="row">
-        <div class="field"><label for="name">Full name</label><input type="text" id="name" name="name" required maxlength="100" autocomplete="name"></div>
+      <div class="field"><label for="name">Name</label><input type="text" id="name" name="name" required maxlength="100" autocomplete="name"></div>
+      <div class="row" style="margin-top:22px">
         <div class="field"><label for="email">Email</label><input type="email" id="email" name="email" required maxlength="320" autocomplete="email"></div>
-        <div class="field"><label for="phone">Phone <span class="opt">(optional)</span></label><input type="tel" id="phone" name="phone" maxlength="40" autocomplete="tel"></div>
-        <div class="field"><label for="link">LinkedIn or portfolio <span class="opt">(optional)</span></label><input type="text" id="link" name="link" maxlength="500" inputmode="url" placeholder="linkedin.com/in/…"></div>
+        <div class="field"><label for="phone">Phone</label><input type="tel" id="phone" name="phone" required maxlength="40" autocomplete="tel"></div>
       </div>
-      <div class="field"><label for="message">Why are you a great fit?</label><textarea id="message" name="message" required maxlength="5000"></textarea></div>
       <div class="field"><label for="cv">CV <span class="opt">(optional, PDF or Word, up to 4MB)</span></label><input type="file" id="cv" name="cv" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></div>
+      <div class="field"><label for="link">LinkedIn, portfolio or website <span class="opt">(optional)</span></label><input type="text" id="link" name="link" maxlength="500" inputmode="url" placeholder="linkedin.com/in/…"></div>
+      <div class="field"><label for="loom">Your Loom video</label><p class="hint">Please attach a short (2 to 5 minute) Loom video introducing yourself, discussing your experience, and sharing why you would be a good fit for this role in particular.</p><input type="url" id="loom" name="loom" required maxlength="500" placeholder="https://www.loom.com/share/…"></div>
+      <fieldset class="field" style="border:0"><legend style="display:block;font-size:15px;font-weight:600;color:var(--dark);margin-bottom:8px">Do the availability requirements shared suit you?</legend>
+        <div class="choices"><label><input type="radio" name="availability" value="Yes" required> Yes</label><label><input type="radio" name="availability" value="No"> No</label></div>
+      </fieldset>
+      <div class="field"><label for="message">Anything else you want to share to support your application? <span class="opt">(optional)</span></label><textarea id="message" name="message" maxlength="5000"></textarea></div>
       <p class="error" role="alert" hidden></p>
       <div class="actions"><button type="submit" class="btn btn-primary btn-lg">Send application</button></div>
     </form>`;
@@ -274,16 +302,21 @@ function jobPage(job, blocks, applied) {
   <header class="hero">
     <h1>${esc(job.title)}</h1>
     ${job.details.length ? `<div class="details">${job.details.map(([label, value]) => `<p><strong>${esc(label)}:</strong> ${esc(value)}</p>`).join('')}</div>` : ''}
+    <div class="cta"><a class="btn btn-primary btn-lg" href="#apply">Apply now</a></div>
   </header>
   ${video ? `<div class="hero-video">${videoFrame(video, job.title)}</div>` : ''}
   ${blocks.length ? `<article class="card content">${renderBlocks(blocks)}</article>` : ''}
-  <section id="apply" class="card">
-    <h2>Apply for this role</h2>
-    <p class="sub">It only takes a couple of minutes.</p>
+  <div class="cta-end"><a class="btn btn-primary btn-lg" href="#apply">Apply now</a></div>
+</main>
+<div id="apply" class="modal${applied ? ' open' : ''}" role="dialog" aria-modal="true" aria-labelledby="apply-title">
+  <div class="modal-box">
+    <a class="close" href="#" aria-label="Close">×</a>
+    <h2 id="apply-title">Apply for this role</h2>
+    <p class="sub">${esc(job.title)}</p>
     <div id="apply-body">${applied ? SUCCESS : form}</div>
     <template id="sent">${SUCCESS}</template>
-  </section>
-</main>
+  </div>
+</div>
 <footer><a href="/">FunnelHaus</a></footer>
 <script>${SCRIPT}</script>`,
   });

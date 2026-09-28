@@ -53,6 +53,8 @@ async function findLiveJob(slug) {
     // "Title for landing page" is the public headline; Title is the fallback.
     title: plain(p['Title for landing page']) || plain(p.Title) || 'Join the team',
     loomUrl: (p['Loom URL'] && p['Loom URL'].url) || '',
+    // Copied onto each applicant so they're filed under the right client.
+    clientIds: ((p.Client && p.Client.relation) || []).map((r) => ({ id: r.id })),
     // Shown under the headline, only when filled in.
     details: [
       ['OTE', plain(p.OTE)],
@@ -108,19 +110,31 @@ const textChunks = (value) => {
   return out;
 };
 
-async function createApplicant({ jobId, name, email, phone, link, message, cvUploadId, cvName }) {
+// Applicants property names, exactly as they are in Notion.
+const FIELDS = {
+  link: 'LinkedIn, Portfolio or Website',
+  loom: 'Please attach a short (2- to 5-minute) Loom video introducing yourself, discussing your experience, and sharing why you would be a good fit for this role in particular',
+  availability: 'Do the availability requirements shared suit you?',
+  message: 'Anything else you want to share to support your application?',
+};
+
+/** Creates the applicant with Status New, linked to the job post and its client. "Applied" is set by Notion. */
+async function createApplicant(job, { name, email, phone, link, loom, availability, message, cvUploadId, cvName }) {
   await notion('/pages', {
     method: 'POST',
     body: {
       parent: { type: 'data_source_id', data_source_id: APPLICANTS_DS },
       properties: {
         Name: { title: [{ type: 'text', text: { content: name } }] },
-        'Job Post': { relation: [{ id: jobId }] },
         Email: { email },
-        Phone: { phone_number: phone || null },
-        Link: { url: link || null },
-        Message: { rich_text: textChunks(message) },
+        Phone: { phone_number: phone },
+        [FIELDS.link]: { url: link || null },
+        [FIELDS.loom]: { url: loom },
+        [FIELDS.availability]: { select: { name: availability } },
+        [FIELDS.message]: { rich_text: textChunks(message) },
         Status: { select: { name: 'New' } },
+        'Job Post': { relation: [{ id: job.id }] },
+        Client: { relation: job.clientIds },
         ...(cvUploadId ? { CV: { files: [{ type: 'file_upload', file_upload: { id: cvUploadId }, name: cvName }] } } : {}),
       },
     },
