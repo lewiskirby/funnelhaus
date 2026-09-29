@@ -50,7 +50,7 @@ type Page = {
 type Prop = {
   type: string;
   title?: { plain_text: string }[];
-  rich_text?: { plain_text: string }[];
+  rich_text?: NotionRichText[];
   email?: string | null;
   url?: string | null;
   number?: number | null;
@@ -328,7 +328,9 @@ export async function setTaskResponseInNotion(taskId: string, response: string):
 }
 
 // ── Events ──────────────────────────────────────────
-// Client Events fields used: Name (title), Client (relation), Date (date).
+// Client Events fields used: Name (title), Client (relation), Date (date),
+// Links for event (text, read only). Notion keeps a time zone we send, but its
+// API only returns the UTC offset (e.g. 19:00-04:00), which is enough to show it.
 
 /** This client's events from today onwards, soonest first. */
 export async function queryClientEvents(clientId: string): Promise<(ClientEvent & { clientIds: string[] })[]> {
@@ -352,13 +354,17 @@ export async function queryClientEvents(clientId: string): Promise<(ClientEvent 
         start: date.start,
         end: date.end ?? undefined,
         allDay: !date.start.includes("T"),
+        links: toRichText(page.properties["Links for event"]?.rich_text),
         clientIds: (page.properties["Client"]?.relation ?? []).map((r) => r.id),
       };
     });
 }
 
-/** Creates an event linked to one client. `start` is a date or a date-time with offset. */
-export async function createEventInNotion(clientId: string, name: string, start: string): Promise<void> {
+/** Notion's date value: a date, or a local date-time in a named time zone. */
+const eventDate = (start: string, timeZone?: string) => (timeZone ? { start, time_zone: timeZone } : { start });
+
+/** Creates an event linked to one client. `start` is a date, or a local date-time when `timeZone` is given. */
+export async function createEventInNotion(clientId: string, name: string, start: string, timeZone?: string): Promise<void> {
   await notion(`/pages`, {
     method: "POST",
     body: {
@@ -366,7 +372,7 @@ export async function createEventInNotion(clientId: string, name: string, start:
       properties: {
         Name: { title: [{ type: "text", text: { content: name } }] },
         Client: { relation: [{ id: clientId }] },
-        Date: { date: { start } },
+        Date: { date: eventDate(start, timeZone) },
       },
     },
   });
@@ -384,13 +390,13 @@ export async function getEventClientIds(eventId: string): Promise<string[] | nul
 }
 
 /** Changes only an event's Name and Date. */
-export async function updateEventInNotion(eventId: string, name: string, start: string): Promise<void> {
+export async function updateEventInNotion(eventId: string, name: string, start: string, timeZone?: string): Promise<void> {
   await notion(`/pages/${eventId}`, {
     method: "PATCH",
     body: {
       properties: {
         Name: { title: [{ type: "text", text: { content: name } }] },
-        Date: { date: { start } },
+        Date: { date: eventDate(start, timeZone) },
       },
     },
   });

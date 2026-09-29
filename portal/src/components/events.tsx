@@ -5,21 +5,90 @@ import { removeEvent, saveEvent } from "@/app/(portal)/actions";
 import { EventRow } from "@/components/event-row";
 import type { ClientEvent } from "@/lib/types";
 
-/** "2026-10-01" + "19:00" → "2026-10-01T19:00:00+02:00" using the viewer's own time zone. */
-function toStart(date: string, time: string) {
-  if (!date || !time) return date;
-  const offset = -new Date(`${date}T${time}`).getTimezoneOffset();
-  const sign = offset >= 0 ? "+" : "-";
-  const pad = (n: number) => String(Math.floor(Math.abs(n))).padStart(2, "0");
-  return `${date}T${time}:00${sign}${pad(offset / 60)}:${pad(offset % 60)}`;
+// Offered in the time zone picker, alongside the viewer's own zone and the event's saved one.
+const TIME_ZONES = [
+  "Pacific/Honolulu",
+  "America/Los_Angeles",
+  "America/Vancouver",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Chicago",
+  "America/New_York",
+  "America/Toronto",
+  "America/Sao_Paulo",
+  "UTC",
+  "Europe/London",
+  "Europe/Dublin",
+  "Europe/Lisbon",
+  "Europe/Amsterdam",
+  "Europe/Berlin",
+  "Europe/Madrid",
+  "Europe/Paris",
+  "Europe/Stockholm",
+  "Europe/Zurich",
+  "Africa/Johannesburg",
+  "Europe/Athens",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Singapore",
+  "Asia/Hong_Kong",
+  "Asia/Tokyo",
+  "Australia/Perth",
+  "Australia/Brisbane",
+  "Australia/Sydney",
+  "Australia/Melbourne",
+  "Pacific/Auckland",
+];
+
+const viewerZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/** Minutes ahead of UTC in `zone` around midday on `date`, e.g. 60 for London in summer. */
+function offsetMinutes(zone: string, date: string) {
+  const at = new Date(`${date || new Date().toISOString().slice(0, 10)}T12:00:00Z`);
+  const name = at.toLocaleString("en-US", { timeZone: zone, timeZoneName: "longOffset" }).split(" ").pop() ?? "";
+  const m = name.match(/GMT([+-])(\d{2}):(\d{2})/);
+  return m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
 }
 
-/** An event's date and time as the viewer's own local date and time inputs. */
+/** "London (GMT+1)" for the offset on the chosen date. */
+function zoneLabel(zone: string, date: string) {
+  const city = zone === "UTC" ? "UTC" : zone.split("/").pop()!.replace(/_/g, " ");
+  const mins = offsetMinutes(zone, date);
+  if (zone === "UTC") return "UTC (GMT)";
+  const sign = mins < 0 ? "-" : "+";
+  const h = Math.floor(Math.abs(mins) / 60);
+  const m = Math.abs(mins) % 60;
+  return `${city} (GMT${mins === 0 ? "" : `${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`})`;
+}
+
+/** Minutes ahead of UTC for a "+01:00" / "-04:00" / "Z" suffix. */
+function suffixMinutes(offset: string) {
+  if (offset === "Z") return 0;
+  const [h, m] = offset.slice(1).split(":").map(Number);
+  return (offset[0] === "-" ? -1 : 1) * (h * 60 + m);
+}
+
+/**
+ * An event's date and time as it was set, and a time zone with that offset on
+ * that date: the viewer's own if it matches, otherwise the first match in the list.
+ */
 function toInputs(event?: ClientEvent) {
-  if (!event) return { date: "", time: "" };
-  if (event.allDay) return { date: event.start.slice(0, 10), time: "" };
+  const own = viewerZone();
+  if (!event) return { date: "", time: "", zone: own };
+  if (event.allDay) return { date: event.start.slice(0, 10), time: "", zone: own };
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})[\d:.]*(Z|[+-]\d{2}:\d{2})$/.exec(event.start);
+  if (m) {
+    const mins = suffixMinutes(m[3]);
+    const zone = [own, ...TIME_ZONES].find((z) => offsetMinutes(z, m[1]) === mins);
+    if (zone) return { date: m[1], time: m[2], zone };
+  }
+  // No zone in the list has that offset: show it on the viewer's own clock instead.
   const d = new Date(event.start);
-  return { date: d.toLocaleDateString("en-CA"), time: d.toTimeString().slice(0, 5) };
+  return {
+    date: d.toLocaleDateString("en-CA", { timeZone: own }),
+    time: d.toLocaleTimeString("en-GB", { timeZone: own, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+    zone: own,
+  };
 }
 
 // 16px text on phones: iOS zooms the whole page into any smaller text box.
@@ -96,6 +165,10 @@ function EventForm({ event, maxName, onDone }: { event?: ClientEvent; maxName: n
   const initial = toInputs(event);
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time);
+  const [zone, setZone] = useState(initial.zone);
+  const zones = [...new Set([...TIME_ZONES, viewerZone(), initial.zone])].sort(
+    (a, b) => offsetMinutes(a, date) - offsetMinutes(b, date) || a.localeCompare(b),
+  );
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string>();
   const [deleting, startDelete] = useTransition();
@@ -138,7 +211,8 @@ function EventForm({ event, maxName, onDone }: { event?: ClientEvent; maxName: n
       </div>
 
       {event && <input type="hidden" name="id" value={event.id} />}
-      <input type="hidden" name="start" value={toStart(date, time)} />
+      <input type="hidden" name="start" value={date && time ? `${date}T${time}` : date} />
+      {time && <input type="hidden" name="timeZone" value={zone} />}
 
       <div>
         <label htmlFor="event-name" className={labelClass}>
@@ -185,6 +259,27 @@ function EventForm({ event, maxName, onDone }: { event?: ClientEvent; maxName: n
           <input id="event-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputClass} />
         </div>
       </div>
+
+      {time && (
+        <div>
+          <label htmlFor="event-zone" className={labelClass}>
+            Time zone
+          </label>
+          <div className="relative">
+            <select id="event-zone" value={zone} onChange={(e) => setZone(e.target.value)} className={`${inputClass} pr-10`}>
+              {zones.map((z) => (
+                <option key={z} value={z}>
+                  {zoneLabel(z, date)}
+                  {z === viewerZone() ? " · your time zone" : ""}
+                </option>
+              ))}
+            </select>
+            <svg viewBox="0 0 20 20" className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+              <path d="M5 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+      )}
 
       {(state?.error || deleteError) && (
         <p role="alert" className="text-[13.5px] font-medium text-brand">

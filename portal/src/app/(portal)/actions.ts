@@ -13,7 +13,10 @@ export async function saveEvent(_prev: EventFormState, formData: FormData): Prom
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "");
   const start = String(formData.get("start") ?? "");
-  const result = id ? await updateClientEvent(client.id, id, name, start) : await addClientEvent(client.id, name, start);
+  const timeZone = String(formData.get("timeZone") ?? "");
+  const result = id
+    ? await updateClientEvent(client.id, id, name, start, timeZone)
+    : await addClientEvent(client.id, name, start, timeZone);
   if (!result.ok) return { error: result.error };
   revalidatePath("/");
   return { added: Date.now() };

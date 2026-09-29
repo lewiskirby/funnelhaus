@@ -62,9 +62,10 @@ export interface AdCreative {
 export interface ClientEvent {
   id: string;
   name: string;
-  start: string; // ISO date, or date-time with offset
+  start: string; // ISO date, or date-time with the offset it was set in
   end?: string;
   allDay: boolean;
+  links?: RichText[]; // "Links for event", e.g. the webinar or Zoom links
   editable?: boolean; // linked to this client only, so they may edit or delete it
 }
 
