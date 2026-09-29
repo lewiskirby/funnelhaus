@@ -55,6 +55,8 @@ async function findLiveJob(slug) {
     loomUrl: (p['Loom URL'] && p['Loom URL'].url) || '',
     // Copied onto each applicant so they're filed under the right client.
     clientIds: ((p.Client && p.Client.relation) || []).map((r) => ({ id: r.id })),
+    // Copied onto each applicant so they can be filtered by role.
+    role: selected(p.Role),
     // Shown under the headline, only when filled in.
     details: [
       ['OTE', plain(p.OTE)],
@@ -135,6 +137,8 @@ async function createApplicant(job, { name, email, phone, link, loom, availabili
         Status: { select: { name: 'New' } },
         'Job Post': { relation: [{ id: job.id }] },
         Client: { relation: job.clientIds },
+        // Notion adds the option if a job post uses a role Applicants doesn't have yet.
+        ...(job.role ? { Role: { select: { name: job.role } } } : {}),
         ...(cvUploadId ? { CV: { files: [{ type: 'file_upload', file_upload: { id: cvUploadId }, name: cvName }] } } : {}),
       },
     },
