@@ -117,11 +117,12 @@ const FIELDS = {
   link: 'LinkedIn, Portfolio or Website',
   loom: 'Please attach a short (2- to 5-minute) Loom video introducing yourself, discussing your experience, and sharing why you would be a good fit for this role in particular',
   availability: 'Do the availability requirements shared suit you?',
+  source: 'Where did you hear about this role?',
   message: 'Anything else you want to share to support your application?',
 };
 
 /** Creates the applicant with Status New, linked to the job post and its client. "Applied" is set by Notion. */
-async function createApplicant(job, { name, email, phone, link, loom, availability, message, cvUploadId, cvName }) {
+async function createApplicant(job, { name, email, phone, link, loom, availability, source, message, cvUploadId, cvName }) {
   await notion('/pages', {
     method: 'POST',
     body: {
@@ -133,6 +134,7 @@ async function createApplicant(job, { name, email, phone, link, loom, availabili
         [FIELDS.link]: { url: link || null },
         [FIELDS.loom]: { url: loom },
         [FIELDS.availability]: { select: { name: availability } },
+        [FIELDS.source]: { rich_text: textChunks(source) },
         [FIELDS.message]: { rich_text: textChunks(message) },
         Status: { select: { name: 'New' } },
         'Job Post': { relation: [{ id: job.id }] },

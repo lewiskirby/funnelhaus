@@ -285,6 +285,7 @@ function jobPage(job, blocks, applied) {
       <fieldset class="field" style="border:0"><legend style="display:block;font-size:15px;font-weight:600;color:var(--dark);margin-bottom:8px">Do the availability requirements shared suit you?</legend>
         <div class="choices"><label><input type="radio" name="availability" value="Yes" required> Yes</label><label><input type="radio" name="availability" value="No"> No</label></div>
       </fieldset>
+      <div class="field"><label for="source">Where did you hear about this role?</label><input type="text" id="source" name="source" required maxlength="500"></div>
       <div class="field"><label for="message">Anything else you want to share to support your application? <span class="opt">(optional)</span></label><textarea id="message" name="message" maxlength="5000"></textarea></div>
       <p class="error" role="alert" hidden></p>
       <div class="actions"><button type="submit" class="btn btn-primary btn-lg">Send application</button></div>

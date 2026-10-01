@@ -3,8 +3,8 @@
 
 const { findLiveJob, uploadFile, createApplicant } = require('./_notion');
 
-const LIMITS = { name: 100, email: 320, phone: 40, link: 500, loom: 500, availability: 3, message: 5000 };
-const REQUIRED = ['name', 'email', 'phone', 'loom', 'availability'];
+const LIMITS = { name: 100, email: 320, phone: 40, link: 500, loom: 500, availability: 3, source: 500, message: 5000 };
+const REQUIRED = ['name', 'email', 'phone', 'loom', 'availability', 'source'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CV_MAX_BYTES = 4 * 1024 * 1024; // Vercel accepts up to 4.5MB per request
 const CV_TYPES = [
@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
     if (data[key].length > max) return fail(400, 'One of your answers is too long. Please shorten it and try again.');
   }
   for (const key of REQUIRED) {
-    if (!data[key]) return fail(400, 'Please fill in your name, email, phone, Loom video and availability.');
+    if (!data[key]) return fail(400, 'Please answer every question that isn\'t marked optional.');
   }
   data.email = data.email.toLowerCase();
   if (!EMAIL_RE.test(data.email)) return fail(400, 'Please enter a valid email address.');
