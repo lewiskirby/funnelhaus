@@ -517,17 +517,6 @@ export async function getLaunchCalendar(clientId: string, from: string, to: stri
   }
 }
 
-/** The next milestone that isn't done yet, looking up to six months ahead. */
-export async function getNextMilestone(clientId: string, today: string): Promise<LaunchTask | null> {
-  const until = new Date(Date.parse(today) + 183 * 86_400_000).toISOString().slice(0, 10);
-  try {
-    const next = (await notion.queryLaunchItems(clientId, today, until)).filter(ownedBy(clientId)).find((t) => t.milestone && !t.done);
-    return next ? withoutClients(next) : null;
-  } catch {
-    return null; // Details are logged in notion.ts.
-  }
-}
-
 /** Page content safe to send to the browser: tables lose their Notion row ids. */
 function withoutRowIds(blocks: ContentBlock[]): ContentBlock[] {
   return blocks.map((b): ContentBlock => {

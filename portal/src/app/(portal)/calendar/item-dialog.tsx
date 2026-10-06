@@ -1,11 +1,12 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { readLinks } from "@/components/event-row";
 import { NotionContent } from "@/components/notion-content";
 import { plain } from "@/components/rich-text";
 import { Icon } from "@/components/ui";
 import { formatDay } from "@/lib/calendar";
-import type { ContentBlock } from "@/lib/types";
+import type { ContentBlock, RichText } from "@/lib/types";
 import { openCalendarItem, type CalendarItemResult } from "./actions";
 
 const dialogClass =
@@ -72,7 +73,9 @@ function ItemSheet({ opened, onClose }: { opened: Opened; onClose: () => void })
   const result = opened.result;
   const item = result && "item" in result ? result.item : null;
   const blocks = result && "blocks" in result ? result.blocks : [];
-  const empty = item !== null && blocks.length === 0;
+  const links = item?.links?.length ? readLinks(item.links) : [];
+  const hasLinks = links.some((l) => l.links.length || l.notes.length);
+  const empty = item !== null && blocks.length === 0 && !hasLinks;
 
   const when = item
     ? [
@@ -122,14 +125,50 @@ function ItemSheet({ opened, onClose }: { opened: Opened; onClose: () => void })
       ) : empty ? (
         <p className="rounded-2xl bg-canvas px-5 py-8 text-center text-[17px] font-semibold tracking-wide text-muted ring-1 ring-line">TBC</p>
       ) : (
-        <>
-          <CopyButton text={toPlainText(blocks)} />
-          <div className="mt-4">
-            <NotionContent blocks={blocks} />
-          </div>
-        </>
+        <div className="space-y-5">
+          {hasLinks && item?.links && <ClientLinks rich={item.links} />}
+          {blocks.length > 0 && (
+            <div>
+              <CopyButton text={toPlainText(blocks)} />
+              <div className="mt-4">
+                <NotionContent blocks={blocks} />
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
+  );
+}
+
+/** "Client links" from Notion as buttons, with any lines that aren't links shown as notes. */
+function ClientLinks({ rich }: { rich: RichText[] }) {
+  const lines = readLinks(rich);
+  return (
+    <section aria-label="Links" className="rounded-2xl bg-canvas p-4 ring-1 ring-line">
+      <h3 className="mb-2.5 text-[13px] font-semibold text-muted">Links</h3>
+      <ul className="space-y-2">
+        {lines.flatMap((line) => line.links).map((link, i) => (
+          <li key={`${link.href}-${i}`}>
+            <a
+              href={link.href}
+              target="_blank"
+              rel="noopener"
+              className="group flex min-h-11 items-center gap-3 rounded-xl bg-white px-4 py-2.5 text-[14.5px] font-medium text-ink ring-1 ring-line transition hover:text-brand hover:ring-brand/30"
+            >
+              <Icon.link className="size-4 shrink-0 text-faint group-hover:text-brand" />
+              <span className="min-w-0 flex-1 truncate">{link.label}</span>
+              <Icon.external className="size-4 shrink-0 text-faint group-hover:text-brand" />
+            </a>
+          </li>
+        ))}
+      </ul>
+      {lines.flatMap((line) => line.notes).map((note, i) => (
+        <p key={i} className="mt-2 text-[13.5px] text-muted">
+          {note}
+        </p>
+      ))}
+    </section>
   );
 }
 

@@ -40,7 +40,7 @@ function parts(event: ClientEvent, viewerZone: string) {
   };
 }
 
-// ── Links for event ─────────────────────────────────
+// ── Client links ────────────────────────────────────
 
 type EventLink = { href: string; label: string };
 const URL_RE = /https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]]/g;
@@ -58,7 +58,7 @@ const hostOf = (href: string) => {
  * by its own link text, the words on its line ("Zoom: https://…" → "Zoom"), or
  * its website. Lines without a link are shown as notes.
  */
-function readLinks(rich: RichText[]): { links: EventLink[]; notes: string[] }[] {
+export function readLinks(rich: RichText[]): { links: EventLink[]; notes: string[] }[] {
   const lines: RichText[][] = [[]];
   for (const part of rich) {
     part.text.split("\n").forEach((piece, i) => {

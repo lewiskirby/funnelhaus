@@ -10,7 +10,7 @@ their own tasks, events, folders and this week's work. Notion stays the source o
 | 👤 Client Database | Name, logo, Status, folder links |
 | 👥 Portal Users | Who can sign in: Name, Email, Client, Role (Client / FunnelHaus team), Status (Active / Removed), Added by, Last signed in |
 | 🔌 Client Tasks | The client's tasks (Task, Client, Status, Client Response) and page content |
-| 📊 Project Management Tracker | "What we're working on this week" on Home (unfinished tasks due in 7 days). **Event** rows are the "Coming up" events on Home (clients can add, edit and delete their own, but not milestones), using Task, Due Date and Links for event. The Launch calendar shows rows with **Milestone** or **Event** ticked, with the page icon, and opens the page body in a pop-up (TBC when empty). "Hide from client" rows are never shown |
+| 📊 Project Management Tracker | "What we're working on this week" on Home (unfinished tasks due in 7 days). **Event** rows are the "Coming up" events on Home (clients can add, edit and delete their own, but not milestones), using Task, Due Date and Client links. The Launch calendar shows rows with **Milestone** or **Event** ticked, with the page icon, and opens a pop-up with the Client links and page body (TBC when both are empty). Past items are greyed out. "Hide from client" rows are never shown |
 
 The Notion integration must have access to the FunnelHaus HQ page.
 

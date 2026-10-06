@@ -65,7 +65,7 @@ export interface ClientEvent {
   start: string; // ISO date, or date-time with the offset it was set in
   end?: string;
   allDay: boolean;
-  links?: RichText[]; // "Links for event", e.g. the webinar or Zoom links
+  links?: RichText[]; // "Client links", e.g. the webinar or Zoom links
   editable?: boolean; // linked to this client only, so they may edit or delete it
 }
 
@@ -81,6 +81,7 @@ export interface LaunchTask {
   milestone: boolean;
   event: boolean;
   icon?: ClientIcon; // the page's icon in Notion
+  links?: RichText[]; // "Client links", e.g. registration or Zoom links
 }
 
 // Page content from Notion, reduced to what the portal renders.

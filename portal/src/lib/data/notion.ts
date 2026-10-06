@@ -329,7 +329,7 @@ export async function setTaskResponseInNotion(taskId: string, response: string):
 
 // ── Events ──────────────────────────────────────────
 // Events are Project Management Tracker rows with Event ticked. Fields used:
-// Task (title), Client, Due Date, Links for event, and Milestone (a milestone
+// Task (title), Client, Due Date, Client links, and Milestone (a milestone
 // can't be changed from the portal). Notion keeps a time zone we send, but its
 // API only returns the UTC offset (e.g. 19:00-04:00), which is enough to show it.
 
@@ -363,7 +363,7 @@ export async function queryClientEvents(
         start: date.start,
         end: date.end ?? undefined,
         allDay: !date.start.includes("T"),
-        links: toRichText(page.properties["Links for event"]?.rich_text),
+        links: toRichText(page.properties["Client links"]?.rich_text),
         clientIds: (page.properties["Client"]?.relation ?? []).map((r) => r.id),
         milestone: ticked(page, "Milestone"),
       };
@@ -476,7 +476,7 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
 // ── Project Management Tracker ──────────────────────
 // Home shows unfinished task titles for the week. The launch calendar shows
 // only rows with Milestone or Event ticked (title, Due Date, Done or not, page
-// icon, and the page body when opened). Assignee, Links and SOP are never read.
+// icon, Client links, and the page body when opened). Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.
 
 /** Titles of this client's unfinished tracker tasks due between today and `days` from now. */
@@ -525,6 +525,7 @@ function toLaunchItem(page: Page): LaunchTask & { clientIds: string[] } {
     milestone: ticked(page, "Milestone"),
     event: ticked(page, "Event"),
     icon: toIcon(page.icon),
+    links: toRichText(p["Client links"]?.rich_text),
     clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
   };
 }
