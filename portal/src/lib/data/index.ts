@@ -527,7 +527,7 @@ export async function getNextMilestone(clientId: string, today: string): Promise
   const until = new Date(Date.parse(today) + 183 * 86_400_000).toISOString().slice(0, 10);
   try {
     const tasks = await notion.queryLaunchTasks(clientId, today, until);
-    const next = tasks.find((t) => t.milestone && t.status !== "done" && t.clientIds.some((id) => sameId(id, clientId)));
+    const next = tasks.find((t) => t.status !== "done" && t.clientIds.some((id) => sameId(id, clientId)));
     if (!next) return null;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { clientIds, ...task } = next;

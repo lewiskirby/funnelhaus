@@ -69,8 +69,8 @@ export interface ClientEvent {
   editable?: boolean; // linked to this client only, so they may edit or delete it
 }
 
-// A Project Management Tracker task on the client's launch calendar.
-// Only these fields leave the server; Assignee, Links and SOP stay in Notion.
+// A milestone from the Project Management Tracker, on the client's launch calendar.
+// Only tasks with Milestone ticked are shown, and only these fields leave the server.
 export type LaunchStatus = "planned" | "in_progress" | "review" | "done";
 export interface LaunchTask {
   id: string;
@@ -78,7 +78,7 @@ export interface LaunchTask {
   start: string; // YYYY-MM-DD
   end?: string; // YYYY-MM-DD, for tasks that run over several days
   status: LaunchStatus;
-  milestone: boolean; // a key launch moment, e.g. webinar day
+  icon?: ClientIcon; // the task page's icon in Notion
 }
 
 // Page content from Notion, reduced to what the portal renders.

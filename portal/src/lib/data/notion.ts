@@ -466,7 +466,9 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
 }
 
 // ── Project Management Tracker ──────────────────────
-// Only Task, Due Date, Status and Milestone leave the server; Assignee, Links and SOP are never read.
+// Home shows unfinished task titles for the week. The launch calendar shows
+// only tasks with Milestone ticked (title, Due Date, Status and page icon).
+// Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.
 
 /** Titles of this client's unfinished tracker tasks due between today and `days` from now. */
@@ -503,7 +505,7 @@ const LAUNCH_STATUS: Record<string, LaunchStatus> = {
 };
 
 /**
- * This client's launch calendar: tracker tasks (done or not) whose Due Date
+ * This client's launch calendar: milestones (done or not) whose Due Date
  * overlaps `from`..`to`. Ranges are found by start date, looking back a month.
  */
 export async function queryLaunchTasks(clientId: string, from: string, to: string): Promise<(LaunchTask & { clientIds: string[] })[]> {
@@ -515,12 +517,14 @@ export async function queryLaunchTasks(clientId: string, from: string, to: strin
         { property: "Due Date", date: { on_or_after: lookBack } },
         { property: "Due Date", date: { on_or_before: to } },
         { property: "Hide from client", checkbox: { equals: false } },
+        { property: "Milestone", checkbox: { equals: true } },
       ],
     },
     sorts: [{ property: "Due Date", direction: "ascending" }],
   });
+  // Belt and braces: never return a hidden task or a non-milestone even if the filter changes.
   return pages
-    .filter((page) => !page.in_trash && !page.properties["Hide from client"]?.checkbox && page.properties["Due Date"]?.date?.start)
+    .filter((page) => !page.in_trash && !page.properties["Hide from client"]?.checkbox && page.properties["Milestone"]?.checkbox && page.properties["Due Date"]?.date?.start)
     .map((page) => {
       const p = page.properties;
       const date = p["Due Date"]!.date!;
@@ -532,7 +536,7 @@ export async function queryLaunchTasks(clientId: string, from: string, to: strin
         start,
         end,
         status: LAUNCH_STATUS[option(p["Status"])] ?? "planned",
-        milestone: Boolean(p["Milestone"]?.checkbox),
+        icon: toIcon(page.icon),
         clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
       };
     })

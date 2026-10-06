@@ -12,14 +12,14 @@ type Entry = { kind: "task"; task: LaunchTask } | { kind: "event"; event: Client
 
 const TIMED_RE = /^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})[\d:.]*(Z|[+-]\d{2}:\d{2})$/;
 
-/** Everything on each day: events first (they have a time), then milestones, then the rest. */
+/** Everything on each day: events first (they have a time), then milestones, with done ones last. */
 function byDay(tasks: LaunchTask[], events: ClientEvent[], days: string[]): Map<string, Entry[]> {
   const map = new Map<string, Entry[]>(days.map((d) => [d, []]));
   for (const event of events) {
     const timed = TIMED_RE.exec(event.start);
     map.get(event.start.slice(0, 10))?.push({ kind: "event", event, time: timed ? `${timed[1]} ${offsetLabel(timed[2])}` : undefined });
   }
-  const rank = (t: LaunchTask) => (t.milestone ? 0 : t.status === "done" ? 2 : 1);
+  const rank = (t: LaunchTask) => (t.status === "done" ? 1 : 0);
   for (const task of [...tasks].sort((a, b) => rank(a) - rank(b))) {
     // A task that runs over several days shows on each of them.
     for (let day = task.start; day <= (task.end ?? task.start); day = addDays(day, 1)) map.get(day)?.push({ kind: "task", task });
@@ -47,7 +47,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
     <div className="space-y-8">
       <header>
         <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Launch calendar</h1>
-        <p className="mt-2 text-[15px] text-muted">Everything we&apos;re doing for your launch, day by day, and the key dates we&apos;re working towards.</p>
+        <p className="mt-2 text-[15px] text-muted">The key dates for your launch, and what we&apos;re working towards.</p>
       </header>
 
       {next && <NextMilestone task={next} today={today} />}
@@ -88,7 +88,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
         {/* Agenda on phones */}
         <div className="sm:hidden">
           {busyDays.length === 0 ? (
-            <p className="px-4 py-10 text-center text-[14px] text-muted">Nothing scheduled this month.</p>
+            <p className="px-4 py-10 text-center text-[14px] text-muted">No milestones this month.</p>
           ) : (
             <ol className="divide-y divide-line">
               {busyDays.map((day) => (
@@ -110,7 +110,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
         </div>
 
         {busyDays.length === 0 && (
-          <p className="hidden border-t border-line px-6 py-4 text-[13.5px] text-muted sm:block">Nothing scheduled this month.</p>
+          <p className="hidden border-t border-line px-6 py-4 text-[13.5px] text-muted sm:block">No milestones this month.</p>
         )}
       </section>
     </div>
@@ -131,6 +131,21 @@ function MonthLink({ month, label, icon: ArrowIcon }: { month: string; label: st
   );
 }
 
+/** The milestone's page icon from Notion (emoji or image), or a star if it has none. */
+function MilestoneIcon({ task, className = "size-4 text-[13px]" }: { task: LaunchTask; className?: string }) {
+  const icon = task.icon;
+  if (icon?.type === "image") {
+    // Notion file URLs are signed and short-lived, so skip next/image caching.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={icon.url} alt="" className={`shrink-0 rounded-[4px] object-cover ${className}`} />;
+  }
+  return (
+    <span aria-hidden="true" className={`flex shrink-0 items-center justify-center leading-none ${icon ? "" : "text-brand"} ${className}`}>
+      {icon?.type === "emoji" ? icon.value : "★"}
+    </span>
+  );
+}
+
 function NextMilestone({ task, today }: { task: LaunchTask; today: string }) {
   const days = daysBetween(today, task.start);
   const when = days <= 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
@@ -138,10 +153,15 @@ function NextMilestone({ task, today }: { task: LaunchTask; today: string }) {
     <section className="relative isolate overflow-hidden rounded-[24px] bg-ink-2 px-6 py-6 text-white [clip-path:inset(0_round_24px)] sm:px-8">
       <div className="pointer-events-none absolute -top-28 -right-20 size-[300px] rounded-full bg-brand/45 blur-[100px]" />
       <div className="relative flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="mb-2 text-[12px] font-semibold text-white/45">Next milestone</p>
-          <p className="text-[22px] leading-snug font-bold tracking-[-0.02em] sm:text-[26px]">{task.title}</p>
-          <p className="mt-1 text-[14px] text-white/55">{formatDay(task.start, { weekday: "long", day: "numeric", month: "long" })}</p>
+        <div className="flex min-w-0 items-center gap-4">
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/[0.08] ring-1 ring-white/10">
+            <MilestoneIcon task={task} className="size-8 text-[30px]" />
+          </span>
+          <div className="min-w-0">
+            <p className="mb-1 text-[12px] font-semibold text-white/45">Next milestone</p>
+            <p className="text-[22px] leading-snug font-bold tracking-[-0.02em] sm:text-[26px]">{task.title}</p>
+            <p className="mt-0.5 text-[14px] text-white/55">{formatDay(task.start, { weekday: "long", day: "numeric", month: "long" })}</p>
+          </div>
         </div>
         <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-ink">{when}</span>
       </div>
@@ -151,8 +171,7 @@ function NextMilestone({ task, today }: { task: LaunchTask; today: string }) {
 
 function Legend({ reviews }: { reviews: number }) {
   const items = [
-    { label: "Milestone", swatch: "bg-brand" },
-    { label: "Our work", swatch: "bg-white ring-1 ring-faint" },
+    { label: "Milestone", swatch: "bg-brand-soft ring-1 ring-brand/40" },
     { label: "Ready for your review", swatch: "bg-warn" },
     { label: "Event or call", swatch: "bg-ink-2" },
   ];
@@ -198,15 +217,13 @@ function DayCell({ day, entries, today, outside, lastCol }: { day: string; entri
 }
 
 const PILL = {
-  milestone: "bg-brand text-white font-semibold",
-  review: "bg-warn-soft text-warn ring-1 ring-warn/20 font-medium",
-  in_progress: "bg-white text-ink ring-1 ring-line",
-  planned: "bg-white text-ink ring-1 ring-line",
+  milestone: "bg-brand-soft text-ink ring-1 ring-brand/20 font-semibold",
+  review: "bg-warn-soft text-ink ring-1 ring-warn/30 font-semibold",
   done: "text-faint",
   event: "bg-ink-2 text-white font-medium",
 } as const;
 
-/** One task or event. `roomy` (the phone agenda) wraps long titles and spells out the status. */
+/** One milestone or event. `roomy` (the phone agenda) wraps long titles and spells out the status. */
 function EntryPill({ entry, roomy = false }: { entry: Entry; roomy?: boolean }) {
   const size = roomy ? "px-3 py-2 text-[14px] rounded-xl" : "px-1.5 py-1 text-[11.5px] rounded-md";
   const wrap = roomy ? "break-words" : "truncate";
@@ -226,26 +243,20 @@ function EntryPill({ entry, roomy = false }: { entry: Entry; roomy?: boolean }) 
   }
 
   const { task } = entry;
-  const style = task.status === "done" ? PILL.done : task.milestone ? PILL.milestone : PILL[task.status];
+  const done = task.status === "done";
+  const style = done ? PILL.done : task.status === "review" ? PILL.review : PILL.milestone;
   const status = STATUS_LABEL[task.status];
   return (
     <li title={`${task.title} · ${status}`} className={`flex items-center gap-1.5 leading-snug ${size} ${style}`}>
-      {task.status === "done" ? (
+      {done ? (
         <Icon.check className="size-3.5 shrink-0 text-success" strokeWidth={2.2} />
-      ) : task.milestone ? (
-        <span aria-hidden="true" className="shrink-0 text-[11px]">★</span>
-      ) : task.status === "in_progress" ? (
-        <span className="relative size-2.5 shrink-0 rounded-full border-[1.4px] border-brand">
-          <span className="absolute inset-[1.5px] rounded-full bg-brand [clip-path:inset(0_50%_0_0)]" />
-        </span>
       ) : (
-        <span className={`size-2.5 shrink-0 rounded-full ${task.status === "review" ? "bg-warn" : "border-[1.4px] border-faint"}`} />
+        <MilestoneIcon task={task} className={roomy ? "size-5 text-[17px]" : "size-3.5 text-[12px]"} />
       )}
       <span className={`min-w-0 flex-1 ${wrap}`}>
-        <span className={task.status === "done" ? "line-through decoration-faint/60" : ""}>{task.title}</span>
+        <span className={done ? "line-through decoration-faint/60" : ""}>{task.title}</span>
         {roomy && (
-          <span className={`block text-[12.5px] font-normal ${task.milestone && task.status !== "done" ? "text-white/70" : "text-muted"}`}>
-            {task.milestone && task.status !== "done" ? "Milestone · " : ""}
+          <span className={`block text-[12.5px] font-normal ${task.status === "review" ? "font-medium text-warn" : "text-muted"}`}>
             {status}
             {task.end && ` · until ${formatDay(task.end, { day: "numeric", month: "short" })}`}
           </span>
