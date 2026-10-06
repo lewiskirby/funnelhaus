@@ -8,7 +8,7 @@ import { cache } from "react";
 import * as notion from "./notion";
 import { sendPortalEmail } from "@/lib/email";
 import { ANSWER_MAX } from "@/lib/limits";
-import type { AdCreative, Client, ClientEvent, ContentBlock, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, Client, ClientEvent, ContentBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete"];
@@ -498,5 +498,41 @@ export async function getUpcomingWork(clientId: string): Promise<{ id: string; t
       .map(({ id, title }) => ({ id, title }));
   } catch {
     return []; // Details are logged in notion.ts; Home still loads.
+  }
+}
+
+// ── Launch calendar ─────────────────────────────────
+// The Project Management Tracker on a calendar, with the client's events alongside.
+
+/** Tracker tasks and events for this client between two dates (YYYY-MM-DD). */
+export async function getLaunchCalendar(clientId: string, from: string, to: string): Promise<{ tasks: LaunchTask[]; events: ClientEvent[] }> {
+  const [tasks, events] = await Promise.all([
+    notion.queryLaunchTasks(clientId, from, to).catch(() => []), // Details are logged in notion.ts.
+    notion.queryClientEvents(clientId, { from, until: to }).catch(() => []),
+  ]);
+  return {
+    tasks: tasks
+      .filter((t) => t.clientIds.some((id) => sameId(id, clientId)))
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(({ clientIds, ...task }) => task),
+    events: events
+      .filter((e) => e.clientIds.some((id) => sameId(id, clientId)))
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(({ clientIds, links, ...event }) => event),
+  };
+}
+
+/** The next milestone that isn't done yet, looking up to six months ahead. */
+export async function getNextMilestone(clientId: string, today: string): Promise<LaunchTask | null> {
+  const until = new Date(Date.parse(today) + 183 * 86_400_000).toISOString().slice(0, 10);
+  try {
+    const tasks = await notion.queryLaunchTasks(clientId, today, until);
+    const next = tasks.find((t) => t.milestone && t.status !== "done" && t.clientIds.some((id) => sameId(id, clientId)));
+    if (!next) return null;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { clientIds, ...task } = next;
+    return task;
+  } catch {
+    return null; // Details are logged in notion.ts.
   }
 }

@@ -144,7 +144,14 @@ export default async function HomePage() {
       {/* This week + coming up */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <section className="card p-6 lg:col-span-3">
-          <SectionHeading title="What we're working on this week" />
+          <SectionHeading
+            title="What we're working on this week"
+            action={
+              <Link href="/calendar" className="text-[13px] font-semibold text-brand hover:underline">
+                Launch calendar
+              </Link>
+            }
+          />
           {work.length === 0 ? (
             <p className="text-[14px] text-muted">Nothing scheduled for the next 7 days.</p>
           ) : (

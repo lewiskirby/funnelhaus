@@ -1,18 +1,12 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { offsetLabel } from "@/lib/calendar";
 import type { ClientEvent, RichText } from "@/lib/types";
 
 // Rendered in Berlin time on the server, then in the viewer's own time zone.
 const DEFAULT_TZ = "Europe/Berlin";
 const noopSubscribe = () => () => {};
-
-/** "+01:00" → "GMT+1", "-04:00" → "GMT-4", "+05:30" → "GMT+5:30", "Z" → "GMT". */
-export function offsetLabel(offset: string) {
-  if (offset === "Z" || /^[+-]00:00$/.test(offset)) return "GMT";
-  const [h, m] = offset.slice(1).split(":");
-  return `GMT${offset[0]}${Number(h)}${m === "00" ? "" : `:${m}`}`;
-}
 
 const START_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})[\d:.]*(Z|[+-]\d{2}:\d{2})$/;
 

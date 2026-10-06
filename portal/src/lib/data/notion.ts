@@ -3,7 +3,7 @@
 
 import "server-only";
 import { cache } from "react";
-import type { AdCreative, AdStage, Client, ClientEvent, ClientIcon, ContentBlock, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, AdStage, Client, ClientEvent, ClientIcon, ContentBlock, LaunchStatus, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -332,14 +332,17 @@ export async function setTaskResponseInNotion(taskId: string, response: string):
 // Links for event (text, read only). Notion keeps a time zone we send, but its
 // API only returns the UTC offset (e.g. 19:00-04:00), which is enough to show it.
 
-/** This client's events from today onwards, soonest first. */
-export async function queryClientEvents(clientId: string): Promise<(ClientEvent & { clientIds: string[] })[]> {
-  const today = new Date().toISOString().slice(0, 10);
+/** This client's events from `from` (default today) up to `until` if given, soonest first. */
+export async function queryClientEvents(
+  clientId: string,
+  { from = new Date().toISOString().slice(0, 10), until }: { from?: string; until?: string } = {},
+): Promise<(ClientEvent & { clientIds: string[] })[]> {
   const pages = await queryAll(EVENTS_DS, {
     filter: {
       and: [
         { property: "Client", relation: { contains: clientId } },
-        { property: "Date", date: { on_or_after: today } },
+        { property: "Date", date: { on_or_after: from } },
+        ...(until ? [{ property: "Date", date: { on_or_before: until } }] : []),
       ],
     },
     sorts: [{ property: "Date", direction: "ascending" }],
@@ -463,7 +466,7 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
 }
 
 // ── Project Management Tracker ──────────────────────
-// Only the Task title leaves the server; Assignee, Links and SOP are never read.
+// Only Task, Due Date, Status and Milestone leave the server; Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.
 
 /** Titles of this client's unfinished tracker tasks due between today and `days` from now. */
@@ -488,6 +491,52 @@ export async function queryUpcomingWork(clientId: string, days: number): Promise
     title: text(page.properties["Task"]),
     clientIds: (page.properties["Client"]?.relation ?? []).map((r) => r.id),
   }));
+}
+
+// Tracker statuses as a client reads them. "External review" is waiting on the client.
+const LAUNCH_STATUS: Record<string, LaunchStatus> = {
+  "Not started": "planned",
+  "In progress": "in_progress",
+  "Internal review": "in_progress",
+  "External review": "review",
+  Done: "done",
+};
+
+/**
+ * This client's launch calendar: tracker tasks (done or not) whose Due Date
+ * overlaps `from`..`to`. Ranges are found by start date, looking back a month.
+ */
+export async function queryLaunchTasks(clientId: string, from: string, to: string): Promise<(LaunchTask & { clientIds: string[] })[]> {
+  const lookBack = new Date(Date.parse(from) - 31 * 86_400_000).toISOString().slice(0, 10);
+  const pages = await queryAll(TRACKER_DS, {
+    filter: {
+      and: [
+        { property: "Client", relation: { contains: clientId } },
+        { property: "Due Date", date: { on_or_after: lookBack } },
+        { property: "Due Date", date: { on_or_before: to } },
+        { property: "Hide from client", checkbox: { equals: false } },
+      ],
+    },
+    sorts: [{ property: "Due Date", direction: "ascending" }],
+  });
+  return pages
+    .filter((page) => !page.in_trash && !page.properties["Hide from client"]?.checkbox && page.properties["Due Date"]?.date?.start)
+    .map((page) => {
+      const p = page.properties;
+      const date = p["Due Date"]!.date!;
+      const start = date.start.slice(0, 10);
+      const end = date.end && date.end.slice(0, 10) > start ? date.end.slice(0, 10) : undefined;
+      return {
+        id: page.id,
+        title: text(p["Task"]),
+        start,
+        end,
+        status: LAUNCH_STATUS[option(p["Status"])] ?? "planned",
+        milestone: Boolean(p["Milestone"]?.checkbox),
+        clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
+      };
+    })
+    .filter((task) => task.title && (task.end ?? task.start) >= from);
 }
 
 // ── Page content ────────────────────────────────────
