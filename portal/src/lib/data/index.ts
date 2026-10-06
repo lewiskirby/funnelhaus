@@ -376,8 +376,8 @@ export async function getClientEvents(clientId: string): Promise<ClientEvent[]> 
     const events = await notion.queryClientEvents(clientId);
     return events
       .filter((e) => e.clientIds.some((id) => sameId(id, clientId)))
-      // Events shared with other clients are read-only here.
-      .map(({ clientIds, ...event }) => ({ ...event, editable: clientIds.length === 1 }));
+      // Events shared with other clients, and milestones, are read-only here.
+      .map(({ clientIds, milestone, ...event }) => ({ ...event, editable: clientIds.length === 1 && !milestone }));
   } catch {
     return []; // Details are logged in notion.ts; Home still loads.
   }
@@ -502,37 +502,51 @@ export async function getUpcomingWork(clientId: string): Promise<{ id: string; t
 }
 
 // ── Launch calendar ─────────────────────────────────
-// The Project Management Tracker on a calendar, with the client's events alongside.
+// Project Management Tracker rows with Milestone or Event ticked, on a calendar.
 
-/** Tracker tasks and events for this client between two dates (YYYY-MM-DD). */
-export async function getLaunchCalendar(clientId: string, from: string, to: string): Promise<{ tasks: LaunchTask[]; events: ClientEvent[] }> {
-  const [tasks, events] = await Promise.all([
-    notion.queryLaunchTasks(clientId, from, to).catch(() => []), // Details are logged in notion.ts.
-    notion.queryClientEvents(clientId, { from, until: to }).catch(() => []),
-  ]);
-  return {
-    tasks: tasks
-      .filter((t) => t.clientIds.some((id) => sameId(id, clientId)))
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .map(({ clientIds, ...task }) => task),
-    events: events
-      .filter((e) => e.clientIds.some((id) => sameId(id, clientId)))
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      .map(({ clientIds, links, ...event }) => event),
-  };
+const ownedBy = (clientId: string) => (item: { clientIds: string[] }) => item.clientIds.some((id) => sameId(id, clientId));
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const withoutClients = ({ clientIds, ...item }: LaunchTask & { clientIds: string[] }): LaunchTask => item;
+
+/** This client's milestones and events between two dates (YYYY-MM-DD). */
+export async function getLaunchCalendar(clientId: string, from: string, to: string): Promise<LaunchTask[]> {
+  try {
+    return (await notion.queryLaunchItems(clientId, from, to)).filter(ownedBy(clientId)).map(withoutClients);
+  } catch {
+    return []; // Details are logged in notion.ts.
+  }
 }
 
 /** The next milestone that isn't done yet, looking up to six months ahead. */
 export async function getNextMilestone(clientId: string, today: string): Promise<LaunchTask | null> {
   const until = new Date(Date.parse(today) + 183 * 86_400_000).toISOString().slice(0, 10);
   try {
-    const tasks = await notion.queryLaunchTasks(clientId, today, until);
-    const next = tasks.find((t) => t.status !== "done" && t.clientIds.some((id) => sameId(id, clientId)));
-    if (!next) return null;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { clientIds, ...task } = next;
-    return task;
+    const next = (await notion.queryLaunchItems(clientId, today, until)).filter(ownedBy(clientId)).find((t) => t.milestone && !t.done);
+    return next ? withoutClients(next) : null;
   } catch {
     return null; // Details are logged in notion.ts.
   }
+}
+
+/** Page content safe to send to the browser: tables lose their Notion row ids. */
+function withoutRowIds(blocks: ContentBlock[]): ContentBlock[] {
+  return blocks.map((b): ContentBlock => {
+    if (b.type === "table") return { ...b, rowIds: undefined };
+    if (b.type === "translation") return { ...b, blocks: withoutRowIds(b.blocks) };
+    if ("children" in b && b.children) return { ...b, children: withoutRowIds(b.children) };
+    return b;
+  });
+}
+
+/** A milestone or event and its page content, if it's on this client's calendar. Empty content means TBC. */
+export async function getCalendarItem(clientId: string, id: string): Promise<{ item: LaunchTask; blocks: ContentBlock[] } | null> {
+  const item = await notion.getLaunchItemPage(id);
+  if (!item || !ownedBy(clientId)(item)) return null;
+  let blocks: ContentBlock[] = [];
+  try {
+    blocks = withoutRowIds(await notion.getPageContent(id, { fresh: true }));
+  } catch {
+    // Show the item as TBC rather than failing.
+  }
+  return { item: withoutClients(item), blocks };
 }

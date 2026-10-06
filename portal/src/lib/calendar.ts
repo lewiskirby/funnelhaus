@@ -1,8 +1,6 @@
 // Dates for the launch calendar. Days are plain YYYY-MM-DD strings so a task
 // due on the 14th shows on the 14th wherever the viewer is.
 
-import type { LaunchStatus } from "@/lib/types";
-
 /** Today's date in Berlin, as YYYY-MM-DD (the same "today" as the Ads board). */
 export function todayInBerlin() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
@@ -51,10 +49,3 @@ export function monthGrid(month: string): string[] {
 
 export const formatDay = (day: string, opts: Intl.DateTimeFormatOptions) =>
   asDate(day).toLocaleDateString("en-GB", { timeZone: "UTC", ...opts });
-
-export const STATUS_LABEL: Record<LaunchStatus, string> = {
-  planned: "Planned",
-  in_progress: "In progress",
-  review: "Ready for your review",
-  done: "Done",
-};

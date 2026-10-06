@@ -3,14 +3,14 @@
 
 import "server-only";
 import { cache } from "react";
-import type { AdCreative, AdStage, Client, ClientEvent, ClientIcon, ContentBlock, LaunchStatus, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import { offsetLabel } from "@/lib/calendar";
+import type { AdCreative, AdStage, Client, ClientEvent, ClientIcon, ContentBlock, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
 
 export const CLIENTS_DS = process.env.NOTION_CLIENTS_DS ?? "3b904bbf-db00-8005-95df-000b8d13711a";
 export const TASKS_DS = process.env.NOTION_TASKS_DS ?? "3e404bbf-db00-804b-9f7d-000bd5b01c9e";
-export const EVENTS_DS = process.env.NOTION_EVENTS_DS ?? "3e404bbf-db00-8058-8f62-000bc97aa059";
 const CONTENT_TTL_MS = 60_000; // how long page content and template icons are cached
 export const TRACKER_DS = process.env.NOTION_TRACKER_DS ?? "3c104bbf-db00-802e-b3e3-000bba4c7e16";
 export const USERS_DS = process.env.NOTION_USERS_DS ?? "cbac4674-b2ff-472e-8057-dfe82c253644";
@@ -328,37 +328,44 @@ export async function setTaskResponseInNotion(taskId: string, response: string):
 }
 
 // ── Events ──────────────────────────────────────────
-// Client Events fields used: Name (title), Client (relation), Date (date),
-// Links for event (text, read only). Notion keeps a time zone we send, but its
+// Events are Project Management Tracker rows with Event ticked. Fields used:
+// Task (title), Client, Due Date, Links for event, and Milestone (a milestone
+// can't be changed from the portal). Notion keeps a time zone we send, but its
 // API only returns the UTC offset (e.g. 19:00-04:00), which is enough to show it.
+
+const ticked = (page: Page, name: string) => Boolean(page.properties[name]?.checkbox);
+const inTracker = (page: Page) => !page.in_trash && !page.archived && normalise(page.parent?.data_source_id ?? "") === normalise(TRACKER_DS);
 
 /** This client's events from `from` (default today) up to `until` if given, soonest first. */
 export async function queryClientEvents(
   clientId: string,
   { from = new Date().toISOString().slice(0, 10), until }: { from?: string; until?: string } = {},
-): Promise<(ClientEvent & { clientIds: string[] })[]> {
-  const pages = await queryAll(EVENTS_DS, {
+): Promise<(ClientEvent & { clientIds: string[]; milestone: boolean })[]> {
+  const pages = await queryAll(TRACKER_DS, {
     filter: {
       and: [
         { property: "Client", relation: { contains: clientId } },
-        { property: "Date", date: { on_or_after: from } },
-        ...(until ? [{ property: "Date", date: { on_or_before: until } }] : []),
+        { property: "Event", checkbox: { equals: true } },
+        { property: "Hide from client", checkbox: { equals: false } },
+        { property: "Due Date", date: { on_or_after: from } },
+        ...(until ? [{ property: "Due Date", date: { on_or_before: until } }] : []),
       ],
     },
-    sorts: [{ property: "Date", direction: "ascending" }],
+    sorts: [{ property: "Due Date", direction: "ascending" }],
   });
   return pages
-    .filter((page) => page.properties["Date"]?.date?.start)
+    .filter((page) => ticked(page, "Event") && !ticked(page, "Hide from client") && page.properties["Due Date"]?.date?.start)
     .map((page) => {
-      const date = page.properties["Date"]!.date!;
+      const date = page.properties["Due Date"]!.date!;
       return {
         id: page.id,
-        name: text(page.properties["Name"]) || "Event",
+        name: text(page.properties["Task"]) || "Event",
         start: date.start,
         end: date.end ?? undefined,
         allDay: !date.start.includes("T"),
         links: toRichText(page.properties["Links for event"]?.rich_text),
         clientIds: (page.properties["Client"]?.relation ?? []).map((r) => r.id),
+        milestone: ticked(page, "Milestone"),
       };
     });
 }
@@ -371,35 +378,36 @@ export async function createEventInNotion(clientId: string, name: string, start:
   await notion(`/pages`, {
     method: "POST",
     body: {
-      parent: { type: "data_source_id", data_source_id: EVENTS_DS },
+      parent: { type: "data_source_id", data_source_id: TRACKER_DS },
       properties: {
-        Name: { title: [{ type: "text", text: { content: name } }] },
+        Task: { title: [{ type: "text", text: { content: name } }] },
         Client: { relation: [{ id: clientId }] },
-        Date: { date: eventDate(start, timeZone) },
+        "Due Date": { date: eventDate(start, timeZone) },
+        Event: { checkbox: true },
       },
     },
   });
 }
 
-/** The clients an event is linked to, or null if the page isn't an event. */
+/** The clients an event is linked to, or null if the page isn't an event a client may change (e.g. a milestone). */
 export async function getEventClientIds(eventId: string): Promise<string[] | null> {
   try {
     const page = await notion<Page>(`/pages/${eventId}`);
-    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(EVENTS_DS)) return null;
+    if (!inTracker(page) || !ticked(page, "Event") || ticked(page, "Milestone") || ticked(page, "Hide from client")) return null;
     return (page.properties["Client"]?.relation ?? []).map((r) => r.id);
   } catch {
     return null;
   }
 }
 
-/** Changes only an event's Name and Date. */
+/** Changes only an event's Task (name) and Due Date. */
 export async function updateEventInNotion(eventId: string, name: string, start: string, timeZone?: string): Promise<void> {
   await notion(`/pages/${eventId}`, {
     method: "PATCH",
     body: {
       properties: {
-        Name: { title: [{ type: "text", text: { content: name } }] },
-        Date: { date: eventDate(start, timeZone) },
+        Task: { title: [{ type: "text", text: { content: name } }] },
+        "Due Date": { date: eventDate(start, timeZone) },
       },
     },
   });
@@ -467,8 +475,8 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
 
 // ── Project Management Tracker ──────────────────────
 // Home shows unfinished task titles for the week. The launch calendar shows
-// only tasks with Milestone ticked (title, Due Date, Status and page icon).
-// Assignee, Links and SOP are never read.
+// only rows with Milestone or Event ticked (title, Due Date, Done or not, page
+// icon, and the page body when opened). Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.
 
 /** Titles of this client's unfinished tracker tasks due between today and `days` from now. */
@@ -495,20 +503,37 @@ export async function queryUpcomingWork(clientId: string, days: number): Promise
   }));
 }
 
-// Tracker statuses as a client reads them. "External review" is waiting on the client.
-const LAUNCH_STATUS: Record<string, LaunchStatus> = {
-  "Not started": "planned",
-  "In progress": "in_progress",
-  "Internal review": "in_progress",
-  "External review": "review",
-  Done: "done",
-};
+// The launch calendar shows only tracker rows with Milestone or Event ticked.
+const TIMED_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})[\d:.]*(Z|[+-]\d{2}:\d{2})$/;
+const onCalendar = (page: Page) =>
+  inTracker(page) && !ticked(page, "Hide from client") && (ticked(page, "Milestone") || ticked(page, "Event")) && Boolean(page.properties["Due Date"]?.date?.start);
+
+function toLaunchItem(page: Page): LaunchTask & { clientIds: string[] } {
+  const p = page.properties;
+  const date = p["Due Date"]!.date!;
+  // Timed items keep the day and clock time they were set in, e.g. 20:00 GMT-4.
+  const timed = TIMED_RE.exec(date.start);
+  const start = timed?.[1] ?? date.start.slice(0, 10);
+  const end = date.end && date.end.slice(0, 10) > start ? date.end.slice(0, 10) : undefined;
+  return {
+    id: page.id,
+    title: text(p["Task"]),
+    start,
+    end,
+    time: timed ? `${timed[2]} ${offsetLabel(timed[3])}` : undefined,
+    done: option(p["Status"]) === "Done",
+    milestone: ticked(page, "Milestone"),
+    event: ticked(page, "Event"),
+    icon: toIcon(page.icon),
+    clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
+  };
+}
 
 /**
- * This client's launch calendar: milestones (done or not) whose Due Date
- * overlaps `from`..`to`. Ranges are found by start date, looking back a month.
+ * This client's launch calendar: milestones and events (done or not) whose Due
+ * Date overlaps `from`..`to`. Ranges are found by start date, looking back a month.
  */
-export async function queryLaunchTasks(clientId: string, from: string, to: string): Promise<(LaunchTask & { clientIds: string[] })[]> {
+export async function queryLaunchItems(clientId: string, from: string, to: string): Promise<(LaunchTask & { clientIds: string[] })[]> {
   const lookBack = new Date(Date.parse(from) - 31 * 86_400_000).toISOString().slice(0, 10);
   const pages = await queryAll(TRACKER_DS, {
     filter: {
@@ -517,30 +542,26 @@ export async function queryLaunchTasks(clientId: string, from: string, to: strin
         { property: "Due Date", date: { on_or_after: lookBack } },
         { property: "Due Date", date: { on_or_before: to } },
         { property: "Hide from client", checkbox: { equals: false } },
-        { property: "Milestone", checkbox: { equals: true } },
+        { or: [{ property: "Milestone", checkbox: { equals: true } }, { property: "Event", checkbox: { equals: true } }] },
       ],
     },
     sorts: [{ property: "Due Date", direction: "ascending" }],
   });
-  // Belt and braces: never return a hidden task or a non-milestone even if the filter changes.
+  // Belt and braces: never return a hidden or internal task even if the filter changes.
   return pages
-    .filter((page) => !page.in_trash && !page.properties["Hide from client"]?.checkbox && page.properties["Milestone"]?.checkbox && page.properties["Due Date"]?.date?.start)
-    .map((page) => {
-      const p = page.properties;
-      const date = p["Due Date"]!.date!;
-      const start = date.start.slice(0, 10);
-      const end = date.end && date.end.slice(0, 10) > start ? date.end.slice(0, 10) : undefined;
-      return {
-        id: page.id,
-        title: text(p["Task"]),
-        start,
-        end,
-        status: LAUNCH_STATUS[option(p["Status"])] ?? "planned",
-        icon: toIcon(page.icon),
-        clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
-      };
-    })
-    .filter((task) => task.title && (task.end ?? task.start) >= from);
+    .filter(onCalendar)
+    .map(toLaunchItem)
+    .filter((item) => item.title && (item.end ?? item.start) >= from);
+}
+
+/** One milestone or event, or null if the page isn't one a client may see. */
+export async function getLaunchItemPage(id: string): Promise<(LaunchTask & { clientIds: string[] }) | null> {
+  try {
+    const page = await notion<Page>(`/pages/${id}`);
+    return onCalendar(page) ? toLaunchItem(page) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Page content ────────────────────────────────────

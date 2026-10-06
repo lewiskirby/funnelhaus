@@ -69,16 +69,18 @@ export interface ClientEvent {
   editable?: boolean; // linked to this client only, so they may edit or delete it
 }
 
-// A milestone from the Project Management Tracker, on the client's launch calendar.
-// Only tasks with Milestone ticked are shown, and only these fields leave the server.
-export type LaunchStatus = "planned" | "in_progress" | "review" | "done";
+// A milestone or event from the Project Management Tracker, on the client's launch calendar.
+// Only rows with Milestone or Event ticked are shown, and only these fields leave the server.
 export interface LaunchTask {
   id: string;
   title: string;
-  start: string; // YYYY-MM-DD
-  end?: string; // YYYY-MM-DD, for tasks that run over several days
-  status: LaunchStatus;
-  icon?: ClientIcon; // the task page's icon in Notion
+  start: string; // YYYY-MM-DD, the day it was set on
+  end?: string; // YYYY-MM-DD, for items that run over several days
+  time?: string; // e.g. "20:00 GMT-4", the clock time it was set in
+  done: boolean;
+  milestone: boolean;
+  event: boolean;
+  icon?: ClientIcon; // the page's icon in Notion
 }
 
 // Page content from Notion, reduced to what the portal renders.
