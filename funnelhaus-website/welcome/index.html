@@ -312,10 +312,12 @@
       font-size: 13px;
       color: rgba(255,255,255,0.32);
     }
+    .footer-bottom span:last-child { max-width: 560px; text-align: right; line-height: 1.6; }
 
     @media (max-width: 720px) {
       .footer-grid { grid-template-columns: 1fr; gap: 40px; }
       .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+      .footer-bottom span:last-child { text-align: center; }
     }
   </style>
 </head>
@@ -566,6 +568,7 @@
 
       <div class="footer-bottom">
         <span>© 2026 FunnelHaus. All rights reserved.</span>
+        <span>FunnelHaus is a trading name of FH Operations Group Ltd, registered in England and Wales (company number 17502296). Registered office: 71-75 Shelton Street, Covent Garden, London, WC2H 9JQ.</span>
       </div>
     </div>
   </footer>
