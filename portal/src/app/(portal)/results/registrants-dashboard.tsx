@@ -44,7 +44,17 @@ const valueOf = (r: Registrant, d: Dimension) => r[d] ?? NOT_SET;
 type Filters = Record<Dimension, string>;
 const NO_FILTERS: Filters = { source: "", medium: "", campaign: "", content: "" };
 
-export function RegistrantsDashboard({ registrants, ghlUrl, fetchedAt }: { registrants: Registrant[]; ghlUrl: string; fetchedAt: number }) {
+export function RegistrantsDashboard({
+  registrants,
+  webinars: known,
+  ghlUrl,
+  fetchedAt,
+}: {
+  registrants: Registrant[];
+  webinars: { key: string; label: string }[]; // tagged in GHL or on the calendar, including upcoming ones
+  ghlUrl: string;
+  fetchedAt: number;
+}) {
   const zone = useSyncExternalStore(
     noopSubscribe,
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -57,11 +67,12 @@ export function RegistrantsDashboard({ registrants, ghlUrl, fetchedAt }: { regis
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [dimension, setDimension] = useState<Dimension>("source");
 
+  // Newest first, so upcoming webinars sit at the top of the list.
   const webinars = useMemo(() => {
-    const byKey = new Map<string, string>();
+    const byKey = new Map<string, string>(known.map((w) => [w.key, w.label]));
     for (const r of registrants) for (const w of r.webinars) byKey.set(w.key, w.label);
     return [...byKey].sort(([a], [b]) => b.localeCompare(a)).map(([key, label]) => ({ key, label }));
-  }, [registrants]);
+  }, [registrants, known]);
 
   const today = dayIn(new Date(now).toISOString(), zone);
   const daysAgo = (n: number) => dayIn(new Date(now - n * 86_400_000).toISOString(), zone);
@@ -130,6 +141,7 @@ export function RegistrantsDashboard({ registrants, ghlUrl, fetchedAt }: { regis
             {webinars.map((w) => (
               <option key={w.key} value={w.key}>
                 {w.label}
+                {w.key > today ? " (upcoming)" : w.key === today ? " (today)" : ""}
               </option>
             ))}
           </Select>

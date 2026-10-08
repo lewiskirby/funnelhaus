@@ -95,6 +95,14 @@ function webinarOf(tag: string): { key: string; label: string } | null {
 
 const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
+export type Webinar = { key: string; label: string };
+
+/** Every webinar with a tag in GHL, even before anyone has registered for it. */
+async function fetchWebinarTags(account: Account): Promise<Webinar[]> {
+  const { tags } = await ghl<{ tags: { name: string }[] }>(account, `/locations/${account.locationId}/tags`);
+  return (tags ?? []).map((t) => webinarOf(t.name)).filter((w): w is Webinar => w !== null);
+}
+
 async function fetchRegistrants(account: Account): Promise<Registrant[]> {
   const ids = await utmFieldIds(account);
   const contacts: Contact[] = [];
@@ -133,10 +141,13 @@ async function fetchRegistrants(account: Account): Promise<Registrant[]> {
   });
 }
 
-type Fetched = { registrants: Registrant[]; fetchedAt: number };
+type Fetched = { registrants: Registrant[]; webinars: Webinar[]; fetchedAt: number };
 const cache = new Map<string, { at: number; result: Promise<Fetched> }>();
 
-/** This client's webinar registrants, newest first, or null if they aren't connected to GHL. Cached for 5 minutes. */
+/**
+ * This client's webinar registrants (newest first) and every webinar tagged in GHL,
+ * or null if they aren't connected to GHL. Cached for 5 minutes.
+ */
 export async function getWebinarRegistrants(clientId: string): Promise<Fetched | null> {
   const account = accountFor(clientId);
   if (!account?.locationId || !account.token) return null;
@@ -144,7 +155,11 @@ export async function getWebinarRegistrants(clientId: string): Promise<Fetched |
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.result;
   const at = Date.now();
-  const result = fetchRegistrants(account).then((registrants) => ({ registrants, fetchedAt: at }));
+  const result = Promise.all([fetchRegistrants(account), fetchWebinarTags(account).catch(() => [])]).then(([registrants, webinars]) => ({
+    registrants,
+    webinars,
+    fetchedAt: at,
+  }));
   cache.set(key, { at, result });
   result.catch(() => cache.delete(key)); // don't keep failures
   return result;

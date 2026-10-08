@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { getWebinarRegistrants, ghlContactsUrl } from "@/lib/ghl";
+import { formatDay } from "@/lib/calendar";
+import { getClientEvents } from "@/lib/data";
+import { getWebinarRegistrants, ghlContactsUrl, type Webinar } from "@/lib/ghl";
 import { requireClient } from "@/lib/session";
 import { RegistrantsDashboard } from "./registrants-dashboard";
 
@@ -22,12 +24,18 @@ export default async function ResultsPage() {
   const ghlUrl = ghlContactsUrl(client.id);
   if (!ghlUrl) return <ComingSoon />;
 
-  let data: Awaited<ReturnType<typeof getWebinarRegistrants>> = null;
-  try {
-    data = await getWebinarRegistrants(client.id);
-  } catch {
-    // Details are logged in ghl.ts.
+  // A GHL failure shows a message below; details are logged in ghl.ts.
+  const [data, events] = await Promise.all([getWebinarRegistrants(client.id).catch(() => null), getClientEvents(client.id)]);
+
+  // Upcoming webinars from the tracker show in the filter before anyone registers,
+  // alongside every webinar tagged in GHL. Matched by date, so each appears once.
+  const webinars = new Map<string, Webinar>();
+  for (const e of events) {
+    if (!/webinar/i.test(e.name)) continue;
+    const key = e.start.slice(0, 10);
+    webinars.set(key, { key, label: formatDay(key, { day: "numeric", month: "long", year: "numeric" }) });
   }
+  for (const w of data?.webinars ?? []) webinars.set(w.key, w);
 
   return (
     <div className="space-y-8">
@@ -36,7 +44,7 @@ export default async function ResultsPage() {
         <p className="mt-2 text-[15px] text-muted">Your webinar registrants from GoHighLevel, and where they came from. Updated every few minutes.</p>
       </header>
       {data ? (
-        <RegistrantsDashboard registrants={data.registrants} fetchedAt={data.fetchedAt} ghlUrl={ghlUrl} />
+        <RegistrantsDashboard registrants={data.registrants} webinars={[...webinars.values()]} fetchedAt={data.fetchedAt} ghlUrl={ghlUrl} />
       ) : (
         <p className="rounded-2xl bg-brand-soft px-5 py-4 text-[14.5px] text-brand">
           We couldn&apos;t load your registrants from GoHighLevel just now. Please refresh in a minute.
