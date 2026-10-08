@@ -141,7 +141,7 @@ function ItemSheet({ opened, onClose }: { opened: Opened; onClose: () => void })
   );
 }
 
-/** "Client links" from Notion as buttons, with any lines that aren't links shown as notes. */
+/** "Client links" from Notion: each shows its full address with a copy button. Lines that aren't links are notes. */
 function ClientLinks({ rich }: { rich: RichText[] }) {
   const lines = readLinks(rich);
   return (
@@ -149,18 +149,7 @@ function ClientLinks({ rich }: { rich: RichText[] }) {
       <h3 className="mb-2.5 text-[13px] font-semibold text-muted">Links</h3>
       <ul className="space-y-2">
         {lines.flatMap((line) => line.links).map((link, i) => (
-          <li key={`${link.href}-${i}`}>
-            <a
-              href={link.href}
-              target="_blank"
-              rel="noopener"
-              className="group flex min-h-11 items-center gap-3 rounded-xl bg-white px-4 py-2.5 text-[14.5px] font-medium text-ink ring-1 ring-line transition hover:text-brand hover:ring-brand/30"
-            >
-              <Icon.link className="size-4 shrink-0 text-faint group-hover:text-brand" />
-              <span className="min-w-0 flex-1 truncate">{link.label}</span>
-              <Icon.external className="size-4 shrink-0 text-faint group-hover:text-brand" />
-            </a>
-          </li>
+          <LinkRow key={`${link.href}-${i}`} href={link.href} label={link.label} />
         ))}
       </ul>
       {lines.flatMap((line) => line.notes).map((note, i) => (
@@ -169,6 +158,38 @@ function ClientLinks({ rich }: { rich: RichText[] }) {
         </p>
       ))}
     </section>
+  );
+}
+
+function LinkRow({ href, label }: { href: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked: the address is shown in full so it can be selected and copied by hand.
+    }
+  }
+  return (
+    <li className="flex items-center gap-3 rounded-xl bg-white px-4 py-2.5 ring-1 ring-line">
+      <div className="min-w-0 flex-1">
+        <p className="text-[14.5px] font-medium text-ink">{label}</p>
+        <p className="text-[13px] break-all text-muted select-all">{href}</p>
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Copy ${label} link`}
+        className={`flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition ${
+          copied ? "bg-success-soft text-success" : "bg-ink text-white hover:bg-ink-2"
+        }`}
+      >
+        {copied && <Icon.check className="size-3.5" strokeWidth={2.2} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </li>
   );
 }
 
