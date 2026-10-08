@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { getWebinarRegistrants, ghlContactsUrl } from "@/lib/ghl";
 import { requireClient } from "@/lib/session";
+import { RegistrantsDashboard } from "./registrants-dashboard";
 
 export const metadata: Metadata = { title: "Results" };
 
@@ -16,8 +18,35 @@ const PREVIEW_KPIS = [
 ];
 
 export default async function ResultsPage() {
-  await requireClient();
+  const client = await requireClient();
+  const ghlUrl = ghlContactsUrl(client.id);
+  if (!ghlUrl) return <ComingSoon />;
 
+  let data: Awaited<ReturnType<typeof getWebinarRegistrants>> = null;
+  try {
+    data = await getWebinarRegistrants(client.id);
+  } catch {
+    // Details are logged in ghl.ts.
+  }
+
+  return (
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Performance</h1>
+        <p className="mt-2 text-[15px] text-muted">Your webinar registrants from GoHighLevel, and where they came from. Updated every few minutes.</p>
+      </header>
+      {data ? (
+        <RegistrantsDashboard registrants={data.registrants} fetchedAt={data.fetchedAt} ghlUrl={ghlUrl} />
+      ) : (
+        <p className="rounded-2xl bg-brand-soft px-5 py-4 text-[14.5px] text-brand">
+          We couldn&apos;t load your registrants from GoHighLevel just now. Please refresh in a minute.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ComingSoon() {
   return (
     <div className="space-y-8">
       <header>

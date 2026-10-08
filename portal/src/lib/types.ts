@@ -84,6 +84,17 @@ export interface LaunchTask {
   links?: RichText[]; // "Client links", e.g. registration or Zoom links
 }
 
+// A webinar registrant from the client's GoHighLevel, reduced to what the Results page needs.
+// No names, emails or phone numbers ever leave the server.
+export interface Registrant {
+  addedAt: string; // ISO date-time they were added to GHL
+  webinars: { key: string; label: string }[]; // from tags like "14-october-2026-webinar"
+  source?: string; // utm_source
+  medium?: string;
+  campaign?: string;
+  content?: string;
+}
+
 // Page content from Notion, reduced to what the portal renders.
 export interface RichText {
   text: string;

@@ -22,6 +22,7 @@ The Notion integration must have access to the FunnelHaus HQ page.
 | `SESSION_SECRET` | Random string that signs login cookies and sign-in codes (`openssl rand -base64 32`) |
 | `MAKE_PORTAL_EMAIL_WEBHOOK_URL` | Webhook of the Make scenario "FunnelHaus Portal Emails", which sends sign-in codes and teammate welcomes |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Upstash for Redis, added in Vercel under Storage. Holds sign-in codes and rate limits. Optional locally (falls back to memory), required in production |
+| `GHL_CLIENTS` | Optional. Connects a client's GoHighLevel to their Results page, as JSON keyed by the client's Notion page id: `{"<notion id>": {"locationId": "...", "token": "pit-..."}}` (add `"appUrl"` for a white-label GHL domain). The token is a Private Integration with `contacts.readonly` and `locations/customFields.readonly`. Clients not listed see "coming soon" |
 | `ADMIN_EMAIL` | Optional, defaults to `info@funnelhaus.co` |
 
 ## Signing in
@@ -42,3 +43,8 @@ and can view every client.
 npm run dev    # local development on http://localhost:3000
 npm run build  # production build (what Vercel runs)
 ```
+
+## Results page (GoHighLevel)
+
+For clients in `GHL_CLIENTS`, Results shows webinar registrants: contacts tagged `webinar-registrant`, with the webinar taken from tags like `14-october-2026-webinar`. UTMs come from the `contact.utm_source` / `utm_medium` / `utm_campaign` / `utm_content` custom fields, falling back to GHL's own attribution. Data is cached for 5 minutes, and only dates, webinar names and UTMs reach the browser (no names or emails).
+
