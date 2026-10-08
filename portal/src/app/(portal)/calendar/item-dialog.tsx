@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { readLinks } from "@/components/event-row";
+import { CopyLink, readLinks } from "@/components/event-row";
 import { NotionContent } from "@/components/notion-content";
 import { plain } from "@/components/rich-text";
 import { Icon } from "@/components/ui";
@@ -149,7 +149,7 @@ function ClientLinks({ rich }: { rich: RichText[] }) {
       <h3 className="mb-2.5 text-[13px] font-semibold text-muted">Links</h3>
       <ul className="space-y-2">
         {lines.flatMap((line) => line.links).map((link, i) => (
-          <LinkRow key={`${link.href}-${i}`} href={link.href} label={link.label} />
+          <CopyLink key={`${link.href}-${i}`} href={link.href} label={link.label} />
         ))}
       </ul>
       {lines.flatMap((line) => line.notes).map((note, i) => (
@@ -158,38 +158,6 @@ function ClientLinks({ rich }: { rich: RichText[] }) {
         </p>
       ))}
     </section>
-  );
-}
-
-function LinkRow({ href, label }: { href: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard blocked: the address is shown in full so it can be selected and copied by hand.
-    }
-  }
-  return (
-    <li className="flex items-center gap-3 rounded-xl bg-white px-4 py-2.5 ring-1 ring-line">
-      <div className="min-w-0 flex-1">
-        <p className="text-[14.5px] font-medium text-ink">{label}</p>
-        <p className="text-[13px] break-all text-muted select-all">{href}</p>
-      </div>
-      <button
-        type="button"
-        onClick={copy}
-        aria-label={`Copy ${label} link`}
-        className={`flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold transition ${
-          copied ? "bg-success-soft text-success" : "bg-ink text-white hover:bg-ink-2"
-        }`}
-      >
-        {copied && <Icon.check className="size-3.5" strokeWidth={2.2} />}
-        {copied ? "Copied" : "Copy"}
-      </button>
-    </li>
   );
 }
 

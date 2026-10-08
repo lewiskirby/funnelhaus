@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { offsetLabel } from "@/lib/calendar";
 import type { ClientEvent, RichText } from "@/lib/types";
 
@@ -104,6 +104,43 @@ export function readLinks(rich: RichText[]): { links: EventLink[]; notes: string
     .filter((l) => l.links.length || l.notes.length);
 }
 
+/** One Client link: its label and full address, with a button that copies the address. */
+export function CopyLink({ href, label, compact = false }: { href: string; label: string; compact?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked: the address is shown in full so it can be selected and copied by hand.
+    }
+  }
+  return (
+    <li className={`flex items-center gap-3 rounded-xl bg-white ring-1 ring-line ${compact ? "px-3 py-2" : "px-4 py-2.5"}`}>
+      <div className="min-w-0 flex-1">
+        <p className={`font-medium text-ink ${compact ? "text-[13px]" : "text-[14.5px]"}`}>{label}</p>
+        <p className={`break-all text-muted select-all ${compact ? "text-[12px]" : "text-[13px]"}`}>{href}</p>
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Copy ${label} link`}
+        className={`flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full font-semibold transition ${
+          compact ? "min-h-8 px-3 text-[12px]" : "min-h-9 px-3.5 text-[13px]"
+        } ${copied ? "bg-success-soft text-success" : "bg-ink text-white hover:bg-ink-2"}`}
+      >
+        {copied && (
+          <svg viewBox="0 0 20 20" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={2.2} aria-hidden="true">
+            <path d="m4.5 10.5 3.5 3.5 7.5-8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </li>
+  );
+}
+
 function EventLinks({ rich, className }: { rich: RichText[]; className: string }) {
   const lines = readLinks(rich);
   const links = lines.flatMap((l) => l.links);
@@ -112,22 +149,11 @@ function EventLinks({ rich, className }: { rich: RichText[]; className: string }
   return (
     <div className={`mt-2 ${className}`}>
       {links.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <ul className="space-y-1.5">
           {links.map((link, i) => (
-            <a
-              key={`${link.href}-${i}`}
-              href={link.href}
-              target="_blank"
-              rel="noopener"
-              className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-medium text-ink ring-1 ring-line transition hover:text-brand hover:ring-brand/30"
-            >
-              <span className="truncate">{link.label}</span>
-              <svg viewBox="0 0 16 16" className="size-3 shrink-0 text-faint" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
-                <path d="M6 3h7v7M13 3L4 12" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </a>
+            <CopyLink key={`${link.href}-${i}`} href={link.href} label={link.label} compact />
           ))}
-        </div>
+        </ul>
       )}
       {notes.map((note, i) => (
         <p key={i} className="mt-1.5 text-[12.5px] text-muted">
@@ -138,7 +164,7 @@ function EventLinks({ rich, className }: { rich: RichText[]; className: string }
   );
 }
 
-/** One upcoming event. With `onEdit`, the date and name open it for editing; links always open directly. */
+/** One upcoming event. With `onEdit`, the date and name open it for editing; links are copied, not opened. */
 export function EventRow({ event, onEdit }: { event: ClientEvent; onEdit?: () => void }) {
   // Server render uses Berlin; the browser swaps in the viewer's own time zone.
   const viewerZone = useSyncExternalStore(
