@@ -22,16 +22,13 @@ const WHAT_TO_DO: Partial<Record<string, string>> = {
 const cellText = (cell: { text: string }[]) => cell.map((t) => t.text).join("").trim();
 
 /**
- * The script on its own: the "Script" column of the Ad Script template's table
- * (or the first column of the first table), one line per row, empty rows skipped.
+ * The script on its own: column 1 of the first table on the ad's page, one line
+ * per row. The header row (if the table has one) and empty cells are skipped.
  */
 function scriptLines(blocks: ContentBlock[]): string[] {
   for (const block of blocks) {
     if (block.type === "table") {
-      const head = block.header ? block.rows[0] ?? [] : [];
-      const found = head.findIndex((c) => /^script$/i.test(cellText(c)));
-      const column = found >= 0 ? found : 0;
-      return (block.header ? block.rows.slice(1) : block.rows).map((row) => cellText(row[column] ?? [])).filter(Boolean);
+      return (block.header ? block.rows.slice(1) : block.rows).map((row) => cellText(row[0] ?? [])).filter(Boolean);
     }
     if ("children" in block && block.children) {
       const inner = scriptLines(block.children);
