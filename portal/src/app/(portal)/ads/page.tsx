@@ -20,13 +20,16 @@ export default async function AdsPage() {
   // Columns follow Notion; any status an ad uses that isn't in the list yet still gets a column.
   const columns = [...new Set([...statuses, ...ads.map((a) => a.stage)])].map(columnFor);
   const guideCard = (
-    <FilmingGuide>
-      {guide.length > 0 ? (
-        <NotionContent blocks={guide} />
-      ) : (
-        <p className="text-[15px] text-muted">The guide couldn&apos;t be loaded just now. Please try again in a minute.</p>
-      )}
-    </FilmingGuide>
+    <div className="space-y-3">
+      <FilmingGuide>
+        {guide.length > 0 ? (
+          <NotionContent blocks={guide} />
+        ) : (
+          <p className="text-[15px] text-muted">The guide couldn&apos;t be loaded just now. Please try again in a minute.</p>
+        )}
+      </FilmingGuide>
+      <VideoFormat />
+    </div>
   );
 
   if (ads.length === 0) return <ComingSoon guide={guideCard} />;
@@ -101,5 +104,33 @@ function ComingSoon({ guide }: { guide: ReactNode }) {
         </div>
       </section>
     </div>
+  );
+}
+
+/** The format every ad video must follow, shown under the filming guide. */
+function VideoFormat() {
+  return (
+    <section aria-labelledby="video-format" className="flex items-start gap-4 rounded-2xl bg-white p-4 ring-1 ring-line sm:p-5">
+      {/* A 9:16 frame with its safe middle square marked */}
+      <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-canvas ring-1 ring-line">
+        <span className="relative flex h-8 w-[18px] items-center rounded-[3px] border-[1.5px] border-ink">
+          <span className="mx-auto size-[11px] rounded-[2px] bg-brand" />
+        </span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <h2 id="video-format" className="text-[15px] font-bold text-ink">
+          Video format for every ad
+        </h2>
+        <ul className="mt-1.5 space-y-1 text-[14px] text-body">
+          <li>
+            Film for both <strong className="font-semibold text-ink">4:5</strong> and <strong className="font-semibold text-ink">9:16</strong>.
+          </li>
+          <li>
+            Keep the captions and the main subject inside the <strong className="font-semibold text-ink">middle square</strong> of the frame, so
+            nothing important gets cut off in either format.
+          </li>
+        </ul>
+      </div>
+    </section>
   );
 }
