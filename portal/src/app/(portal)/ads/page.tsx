@@ -31,8 +31,8 @@ export default async function AdsPage() {
 
   const yourTurn = clientTurnAds(ads);
   const focus = yourTurn[0]?.stage;
-  const toReview = yourTurn.filter((a) => a.stage === "review").length;
-  const toFilm = yourTurn.filter((a) => a.stage === "film").length;
+  const toReview = yourTurn.filter((a) => a.stage === "Script review").length;
+  const toFilm = yourTurn.filter((a) => a.stage === "Ready to film").length;
   const needs = [toReview && `review ${toReview} script${toReview === 1 ? "" : "s"}`, toFilm && `film ${toFilm} ad${toFilm === 1 ? "" : "s"}`].filter(Boolean);
 
   return (
@@ -81,7 +81,7 @@ export default async function AdsPage() {
 }
 
 // Placeholder cards shown blurred behind the "coming soon" message.
-const PREVIEW = ["Planned", "Review script", "Ready to film", "Live"];
+const PREVIEW = ["Scripting", "Script review", "Ready to film", "Live"];
 
 function ComingSoon({ guide }: { guide: ReactNode }) {
   return (

@@ -3,8 +3,9 @@
 
 import "server-only";
 import { cache } from "react";
+import { isAdStage } from "@/lib/ads";
 import { offsetLabel } from "@/lib/calendar";
-import type { AdCreative, AdStage, Client, ClientEvent, ClientIcon, ContentBlock, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, Client, ClientEvent, ClientIcon, ContentBlock, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -423,24 +424,12 @@ export async function trashEventInNotion(eventId: string): Promise<void> {
 // Length (Sec), Due date, File Drive Link. Performance data (ROAS, CTR, tags,
 // notes) is internal and never read. Rejected and Unused ads are never shown.
 
-// Notion statuses grouped into the columns a client sees.
-const AD_STAGES: Record<string, AdStage> = {
-  "Not started": "planned",
-  Scripting: "planned",
-  "Script review": "review",
-  "Ready to film": "film",
-  Filmed: "editing",
-  Editing: "editing",
-  "Ready for upload": "launch",
-  Live: "live",
-};
-
 type AdRecord = AdCreative & { clientIds: string[] };
 
 function toAd(page: Page): AdRecord | null {
   const p = page.properties;
-  const stage = AD_STAGES[option(p["Status"]) || "Not started"];
-  if (!stage) return null; // Rejected, Unused or an unknown status
+  const stage = option(p["Status"]) || "Not started";
+  if (!isAdStage(stage)) return null; // Rejected, Unused or an unknown status
   return {
     id: page.id,
     name: text(p["Ad ID"]) || "Untitled ad",

@@ -8,7 +8,7 @@ import { cache } from "react";
 import * as notion from "./notion";
 import { sendPortalEmail } from "@/lib/email";
 import { ANSWER_MAX } from "@/lib/limits";
-import { STAGE_STATUS } from "@/lib/ads";
+import { isAdStage } from "@/lib/ads";
 import type { AdCreative, AdStage, Client, ClientEvent, ContentBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
@@ -545,13 +545,12 @@ export async function getCalendarItem(clientId: string, id: string): Promise<{ i
 
 /** Moves one of this client's ads to another column. Only ads linked to this client can be moved. */
 export async function moveClientAd(clientId: string, adId: string, stage: AdStage): Promise<{ ok: true } | { ok: false; error: string }> {
-  const status = STAGE_STATUS[stage];
-  if (!status) return { ok: false, error: "That column doesn't exist." };
+  if (!isAdStage(stage)) return { ok: false, error: "That column doesn't exist." };
   const ad = await notion.getAdPage(adId);
   if (!ad || !ad.clientIds.some((id) => sameId(id, clientId))) return { ok: false, error: "We couldn't find that ad." };
   if (ad.stage === stage) return { ok: true };
   try {
-    await notion.setAdStatusInNotion(adId, status);
+    await notion.setAdStatusInNotion(adId, stage);
     return { ok: true };
   } catch {
     return { ok: false, error: "We couldn't move that ad. Please try again." };

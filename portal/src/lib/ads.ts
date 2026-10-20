@@ -2,26 +2,21 @@
 
 import type { AdCreative, AdStage } from "@/lib/types";
 
+// One column per Status in the Ad Creatives database, in the same order and with the same names.
 export const AD_COLUMNS: { stage: AdStage; title: string; hint: string; clientTurn?: string }[] = [
-  { stage: "planned", title: "Planned", hint: "We're working on the idea and script" },
-  { stage: "review", title: "Review script", hint: "Read the script and tell us any changes", clientTurn: "Review the script" },
-  { stage: "film", title: "Ready to film", hint: "Film it using the script", clientTurn: "Film this ad" },
-  { stage: "editing", title: "In editing", hint: "We're editing your footage" },
-  { stage: "launch", title: "Ready to launch", hint: "Finished and about to go live" },
-  { stage: "live", title: "Live", hint: "Running now" },
+  { stage: "Not started", title: "Not started", hint: "Planned, not started yet" },
+  { stage: "Scripting", title: "Scripting", hint: "We're writing the script" },
+  { stage: "Script review", title: "Script review", hint: "Read the script and tell us any changes", clientTurn: "Review the script" },
+  { stage: "Ready to film", title: "Ready to film", hint: "Film it using the script", clientTurn: "Film this ad" },
+  { stage: "Filmed", title: "Filmed", hint: "We've got your footage" },
+  { stage: "Editing", title: "Editing", hint: "We're editing your footage" },
+  { stage: "Ready for upload", title: "Ready for upload", hint: "Finished and about to go live" },
+  { stage: "Live", title: "Live", hint: "Running now" },
 ];
 
+export const AD_STAGES = AD_COLUMNS.map((c) => c.stage);
+export const isAdStage = (value: string): value is AdStage => (AD_STAGES as string[]).includes(value);
 export const columnFor = (stage: AdStage) => AD_COLUMNS.find((c) => c.stage === stage)!;
-
-/** The Notion Status an ad gets when it's dragged into a column. */
-export const STAGE_STATUS: Record<AdStage, string> = {
-  planned: "Scripting",
-  review: "Script review",
-  film: "Ready to film",
-  editing: "Filmed",
-  launch: "Ready for upload",
-  live: "Live",
-};
 
 /** Today's date in Berlin, as YYYY-MM-DD. */
 function today() {
