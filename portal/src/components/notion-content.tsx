@@ -134,6 +134,15 @@ function Block({ block, taskId }: { block: ContentBlock; taskId?: string }) {
         </div>
       );
     case "toggle":
+      // A toggle with nothing inside is shown greyed out and can't be opened.
+      if (isEmpty(block.children)) {
+        return (
+          <div className="flex items-center gap-3 rounded-2xl bg-canvas/60 px-5 py-3.5 font-medium text-faint ring-1 ring-line/70">
+            <Icon.chevronRight className="size-4 opacity-40" />
+            <Rich parts={block.text} />
+          </div>
+        );
+      }
       return (
         <details className="group rounded-2xl ring-1 ring-line open:bg-canvas/60">
           <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-3.5 font-medium text-ink">
@@ -198,6 +207,11 @@ function Block({ block, taskId }: { block: ContentBlock; taskId?: string }) {
     default:
       return null;
   }
+}
+
+/** True when blocks have nothing to show: none at all, or only blank lines. */
+function isEmpty(blocks?: ContentBlock[]): boolean {
+  return (blocks ?? []).every((b) => "text" in b && !b.text.some((t) => t.text.trim()) && isEmpty("children" in b ? b.children : undefined));
 }
 
 type ListBlock = { type: "bulleted_list_item" | "numbered_list_item"; text: RichText[]; children?: ContentBlock[] };
