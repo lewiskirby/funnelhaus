@@ -1,25 +1,33 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import type { ReactNode } from "react";
+import { NotionContent } from "@/components/notion-content";
 import { Icon } from "@/components/ui";
-import { AD_COLUMNS, clientTurnAds, columnFor, dueLabel } from "@/lib/ads";
-import { getClientAds } from "@/lib/data";
-import { requireClient } from "@/lib/session";
-import type { AdCreative } from "@/lib/types";
+import { clientTurnAds, dueLabel } from "@/lib/ads";
+import { getClientAds, getFilmingGuide } from "@/lib/data";
+import { getSession, requireClient } from "@/lib/session";
+import { AdBoard } from "./ad-board";
 import { BoardScroller } from "./board-scroller";
+import { FilmingGuide } from "./filming-guide";
 
 export const metadata: Metadata = { title: "Ad creatives" };
 
-const TONE = {
-  overdue: "bg-brand-soft text-brand",
-  soon: "bg-warn-soft text-warn",
-  later: "bg-canvas text-muted ring-1 ring-line",
-} as const;
+// The Ad Creatives database in Notion, linked for the FunnelHaus team only.
+const NOTION_ADS_URL = "https://app.notion.com/p/lewisdkkirby/ac904bbfdb008257a71501fcd153f1fc?v=70104bbfdb0083a9aafb08429728e140";
 
 export default async function AdsPage() {
   const client = await requireClient();
-  const ads = await getClientAds(client.id);
+  const [ads, guide, session] = await Promise.all([getClientAds(client.id), getFilmingGuide(), getSession()]);
+  const guideCard = (
+    <FilmingGuide>
+      {guide.length > 0 ? (
+        <NotionContent blocks={guide} />
+      ) : (
+        <p className="text-[15px] text-muted">The guide couldn&apos;t be loaded just now. Please try again in a minute.</p>
+      )}
+    </FilmingGuide>
+  );
 
-  if (ads.length === 0) return <ComingSoon />;
+  if (ads.length === 0) return <ComingSoon guide={guideCard} />;
 
   const yourTurn = clientTurnAds(ads);
   const focus = yourTurn[0]?.stage;
@@ -29,10 +37,24 @@ export default async function AdsPage() {
 
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Ad creatives</h1>
-        <p className="mt-2 text-[15px] text-muted">Every ad we&apos;re making for you, from script to live. Tap an ad to see the script.</p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Ad creatives</h1>
+          <p className="mt-2 text-[15px] text-muted">Every ad we&apos;re making for you, from script to live. Drag an ad along as it moves, or tap it to see the script.</p>
+        </div>
+        {session?.isAdmin && (
+          <a
+            href={NOTION_ADS_URL}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-ink ring-1 ring-line transition hover:ring-brand/30"
+          >
+            Open in Notion <Icon.external className="size-4 text-faint" />
+          </a>
+        )}
       </header>
+
+      {guideCard}
 
       {yourTurn.length > 0 ? (
         <section className="flex items-start gap-3.5 rounded-2xl bg-ink-2 px-5 py-4 text-white sm:px-6">
@@ -52,76 +74,24 @@ export default async function AdsPage() {
 
       {/* Board: columns scroll sideways on smaller screens */}
       <BoardScroller>
-        <div className="flex snap-x snap-mandatory items-start gap-4">
-          {AD_COLUMNS.map((column) => {
-            const cards = ads.filter((ad) => ad.stage === column.stage);
-            const theirs = Boolean(column.clientTurn);
-            return (
-              <section
-                key={column.stage}
-                aria-label={column.title}
-                data-focus={column.stage === focus ? "" : undefined}
-                className={`flex w-[78vw] max-w-[300px] shrink-0 snap-start flex-col rounded-2xl p-3 sm:w-[280px] ${theirs ? "bg-brand-soft/70 ring-1 ring-brand/15" : "bg-canvas ring-1 ring-line"}`}
-              >
-                <div className="px-1.5 pt-1 pb-3">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-[14.5px] font-semibold text-ink">{column.title}</h2>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-[11.5px] font-semibold text-muted ring-1 ring-line">{cards.length}</span>
-                    {theirs && <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold text-white">Your turn</span>}
-                  </div>
-                  <p className="mt-1 text-[12.5px] leading-snug text-muted">{column.hint}</p>
-                </div>
-                <ul className="space-y-2.5">
-                  {cards.length === 0 && <li className="rounded-xl border border-dashed border-line px-3 py-4 text-center text-[12.5px] text-faint">Nothing here</li>}
-                  {cards.map((ad) => (
-                    <AdCard key={ad.id} ad={ad} />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
+        <AdBoard ads={ads} focus={focus} />
       </BoardScroller>
     </div>
-  );
-}
-
-function AdCard({ ad }: { ad: AdCreative }) {
-  const turn = columnFor(ad.stage).clientTurn;
-  const due = ad.due && turn ? dueLabel(ad.due) : null;
-  return (
-    <li>
-      <Link
-        href={`/ads/${ad.id}`}
-        className="group block rounded-xl bg-white p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ring-1 ring-line transition hover:ring-brand/30"
-      >
-        <p className="text-[14px] leading-snug font-semibold break-words text-ink">{ad.name}</p>
-        {(ad.format || ad.lengthSeconds) && (
-          <p className="mt-1 text-[12.5px] text-muted">
-            {[ad.format, ad.lengthSeconds && `${ad.lengthSeconds}s`].filter(Boolean).join(" · ")}
-          </p>
-        )}
-        {(turn || due) && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {turn && <span className="rounded-full bg-brand px-2 py-0.5 text-[11.5px] font-semibold text-white">{turn}</span>}
-            {due && <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${TONE[due.tone]}`}>{due.text}</span>}
-          </div>
-        )}
-      </Link>
-    </li>
   );
 }
 
 // Placeholder cards shown blurred behind the "coming soon" message.
 const PREVIEW = ["Planned", "Review script", "Ready to film", "Live"];
 
-function ComingSoon() {
+function ComingSoon({ guide }: { guide: ReactNode }) {
   return (
     <div className="space-y-8">
       <header>
         <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Ad creatives</h1>
         <p className="mt-2 text-[15px] text-muted">Every ad we&apos;re making for you, from script to live.</p>
       </header>
+
+      {guide}
 
       <section className="relative isolate overflow-hidden rounded-[28px] border border-line bg-white [clip-path:inset(0_round_28px)]">
         {/* Blurred preview of the future board */}

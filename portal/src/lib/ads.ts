@@ -13,6 +13,16 @@ export const AD_COLUMNS: { stage: AdStage; title: string; hint: string; clientTu
 
 export const columnFor = (stage: AdStage) => AD_COLUMNS.find((c) => c.stage === stage)!;
 
+/** The Notion Status an ad gets when it's dragged into a column. */
+export const STAGE_STATUS: Record<AdStage, string> = {
+  planned: "Scripting",
+  review: "Script review",
+  film: "Ready to film",
+  editing: "Filmed",
+  launch: "Ready for upload",
+  live: "Live",
+};
+
 /** Today's date in Berlin, as YYYY-MM-DD. */
 function today() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });

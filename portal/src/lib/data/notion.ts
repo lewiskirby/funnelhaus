@@ -453,6 +453,11 @@ function toAd(page: Page): AdRecord | null {
   };
 }
 
+/** Sets an ad's Status (a Notion status property). */
+export async function setAdStatusInNotion(adId: string, status: string): Promise<void> {
+  await notion(`/pages/${adId}`, { method: "PATCH", body: { properties: { Status: { status: { name: status } } } } });
+}
+
 /** This client's ads that are in production or live. */
 export async function queryClientAds(clientId: string): Promise<AdRecord[]> {
   const pages = await queryAll(ADS_DS, {
