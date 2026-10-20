@@ -71,7 +71,7 @@ function Table({ block }: { block: TableBlock }) {
           <thead className="bg-canvas">
             <tr>
               {head.map((cell, i) => (
-                <th key={i} className="border-b border-line px-4 py-3 font-semibold text-ink">
+                <th key={i} className="border-b border-l border-line px-4 py-3 font-semibold text-ink first:border-l-0">
                   <Rich parts={cell} />
                 </th>
               ))}
@@ -82,7 +82,7 @@ function Table({ block }: { block: TableBlock }) {
           {body.map((row, i) => (
             <tr key={i} className="border-t border-line first:border-t-0">
               {row!.map((cell, j) => (
-                <td key={j} className="px-4 py-3 align-top">
+                <td key={j} className="border-l border-line px-4 py-3 align-top first:border-l-0">
                   <Rich parts={cell} />
                 </td>
               ))}
