@@ -20,7 +20,7 @@ export default async function AdsPage() {
   // Columns follow Notion; any status an ad uses that isn't in the list yet still gets a column.
   const columns = [...new Set([...statuses, ...ads.map((a) => a.stage)])].map(columnFor);
   const guideCard = (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <FilmingGuide>
         {guide.length > 0 ? (
           <NotionContent blocks={guide} />
@@ -110,27 +110,15 @@ function ComingSoon({ guide }: { guide: ReactNode }) {
 /** The format every ad video must follow, shown under the filming guide. */
 function VideoFormat() {
   return (
-    <section aria-labelledby="video-format" className="flex items-start gap-4 rounded-2xl bg-white p-4 ring-1 ring-line sm:p-5">
+    <p className="flex items-start gap-2.5 rounded-xl bg-white px-4 py-2.5 text-[13.5px] leading-snug text-body ring-1 ring-line">
       {/* A 9:16 frame with its safe middle square marked */}
-      <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-canvas ring-1 ring-line">
-        <span className="relative flex h-8 w-[18px] items-center rounded-[3px] border-[1.5px] border-ink">
-          <span className="mx-auto size-[11px] rounded-[2px] bg-brand" />
-        </span>
+      <span aria-hidden="true" className="mt-0.5 flex h-[18px] w-[11px] shrink-0 items-center rounded-[2px] border-[1.5px] border-ink">
+        <span className="mx-auto size-[6px] rounded-[1px] bg-brand" />
       </span>
-      <div className="min-w-0 flex-1">
-        <h2 id="video-format" className="text-[15px] font-bold text-ink">
-          Video format for every ad
-        </h2>
-        <ul className="mt-1.5 space-y-1 text-[14px] text-body">
-          <li>
-            Film for both <strong className="font-semibold text-ink">4:5</strong> and <strong className="font-semibold text-ink">9:16</strong>.
-          </li>
-          <li>
-            Keep the captions and the main subject inside the <strong className="font-semibold text-ink">middle square</strong> of the frame, so
-            nothing important gets cut off in either format.
-          </li>
-        </ul>
-      </div>
-    </section>
+      <span>
+        <strong className="font-semibold text-ink">Video format:</strong> film for 4:5 and 9:16, with captions and the main subject in the
+        middle square of the frame.
+      </span>
+    </p>
   );
 }

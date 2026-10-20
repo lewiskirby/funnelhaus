@@ -6,6 +6,8 @@ import { Icon } from "@/components/ui";
 import { columnFor, dueLabel } from "@/lib/ads";
 import { getClientAd } from "@/lib/data";
 import { requireClient } from "@/lib/session";
+import type { ContentBlock } from "@/lib/types";
+import { FullScript } from "./full-script";
 
 export async function generateMetadata({ params }: PageProps<"/ads/[id]">): Promise<Metadata> {
   const client = await requireClient();
@@ -17,6 +19,28 @@ const WHAT_TO_DO: Partial<Record<string, string>> = {
   "Ready to film": "Film this ad using the script below, then upload the footage to the Ad Creative Uploads folder inside your Asset upload folder (linked on your Home page) and let us know.",
 };
 
+const cellText = (cell: { text: string }[]) => cell.map((t) => t.text).join("").trim();
+
+/**
+ * The script on its own: the "Script" column of the Ad Script template's table
+ * (or the first column of the first table), one line per row, empty rows skipped.
+ */
+function scriptLines(blocks: ContentBlock[]): string[] {
+  for (const block of blocks) {
+    if (block.type === "table") {
+      const head = block.header ? block.rows[0] ?? [] : [];
+      const found = head.findIndex((c) => /^script$/i.test(cellText(c)));
+      const column = found >= 0 ? found : 0;
+      return (block.header ? block.rows.slice(1) : block.rows).map((row) => cellText(row[column] ?? [])).filter(Boolean);
+    }
+    if ("children" in block && block.children) {
+      const inner = scriptLines(block.children);
+      if (inner.length) return inner;
+    }
+  }
+  return [];
+}
+
 export default async function AdPage({ params }: PageProps<"/ads/[id]">) {
   const client = await requireClient();
   const found = await getClientAd(client.id, (await params).id);
@@ -26,6 +50,7 @@ export default async function AdPage({ params }: PageProps<"/ads/[id]">) {
   const column = columnFor(ad.stage);
   const due = ad.due ? dueLabel(ad.due) : null;
   const todo = WHAT_TO_DO[ad.stage];
+  const script = scriptLines(content);
 
   return (
     <div>
@@ -43,15 +68,20 @@ export default async function AdPage({ params }: PageProps<"/ads/[id]">) {
           {(ad.format || ad.lengthSeconds) && (
             <p className="text-[14px] text-muted">{[ad.format, ad.lengthSeconds && `${ad.lengthSeconds} seconds`].filter(Boolean).join(" · ")}</p>
           )}
-          {ad.driveUrl && (
-            <a
-              href={ad.driveUrl}
-              target="_blank"
-              rel="noopener"
-              className="inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-[13.5px] font-semibold text-white transition hover:bg-ink-2"
-            >
-              Open the file <Icon.external className="size-4" />
-            </a>
+          {(script.length > 0 || ad.driveUrl) && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {script.length > 0 && <FullScript name={ad.name} lines={script} />}
+              {ad.driveUrl && (
+                <a
+                  href={ad.driveUrl}
+                  target="_blank"
+                  rel="noopener"
+                  className="inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2.5 text-[13.5px] font-semibold text-white transition hover:bg-ink-2"
+                >
+                  Open the file <Icon.external className="size-4" />
+                </a>
+              )}
+            </div>
           )}
         </header>
 
