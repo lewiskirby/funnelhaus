@@ -62,9 +62,11 @@ function Media({ url, caption }: { url: string; caption: RichText[] }) {
 
 function Table({ block }: { block: TableBlock }) {
   const [head, ...body] = block.header ? block.rows : [undefined, ...block.rows];
+  const columns = block.rows[0]?.length ?? 0;
   return (
+    // Columns share the width equally; wide tables scroll sideways on phones instead of squashing.
     <div className="overflow-x-auto rounded-2xl ring-1 ring-line">
-      <table className="w-full border-collapse text-left text-[14.5px]">
+      <table className={`w-full table-fixed border-collapse text-left text-[14.5px] ${columns >= 3 ? "min-w-[640px]" : ""}`}>
         {head && (
           <thead className="bg-canvas">
             <tr>

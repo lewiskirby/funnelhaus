@@ -29,7 +29,7 @@ export default async function AdPage({ params }: PageProps<"/ads/[id]">) {
   const todo = WHAT_TO_DO[ad.stage];
 
   return (
-    <div className="mx-auto max-w-[760px]">
+    <div>
       <Link href="/ads" className="mb-8 inline-flex items-center gap-2 text-[14px] font-medium text-muted transition hover:text-ink">
         <Icon.arrowLeft className="size-4" /> All ads
       </Link>
