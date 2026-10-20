@@ -11,7 +11,7 @@ their own tasks, events, folders and this week's work. Notion stays the source o
 | 👥 Portal Users | Who can sign in: Name, Email, Client, Role (Client / FunnelHaus team), Status (Active / Removed), Added by, Last signed in |
 | 🔌 Client Tasks | The client's tasks (Task, Client, Status, Client Response) and page content |
 | 📊 Project Management Tracker | "What we're working on this week" on Home (unfinished tasks due in 7 days). **Event** rows are the "Coming up" events on Home (clients can add, edit and delete their own, but not milestones), using Task, Due Date and Client links. The Launch calendar shows rows with **Milestone** or **Event** ticked, with the page icon, and opens a pop-up with the Client links and page body (TBC when both are empty). Past items are greyed out. "Hide from client" rows are never shown |
-| 🪄 Ad Creatives | The Ads board: one column per Status, with the same names and order (Not started, Scripting, Script review, Ready to film, Filmed, Editing, Ready for upload, Live). Rejected and Unused are hidden. Clients drag ads between columns, which sets that Status in Notion |
+| 🪄 Ad Creatives | The Ads board: one column per Status option, read from the database in Notion's order, so adding, renaming or removing a status in Notion changes the board (within a minute). Rejected and Unused are hidden. Clients drag ads between columns, which sets that Status in Notion |
 | ✔️ SOP Hub → Filming ads guide | Shown in the "Watch this first" pop-up on the Ads page (refreshed within a minute of edits). Override the page with `NOTION_FILMING_GUIDE_PAGE` |
 
 The Notion integration must have access to the FunnelHaus HQ page.

@@ -8,7 +8,6 @@ import { cache } from "react";
 import * as notion from "./notion";
 import { sendPortalEmail } from "@/lib/email";
 import { ANSWER_MAX } from "@/lib/limits";
-import { isAdStage } from "@/lib/ads";
 import type { AdCreative, AdStage, Client, ClientEvent, ContentBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
@@ -544,8 +543,18 @@ export async function getCalendarItem(clientId: string, id: string): Promise<{ i
 // ── Moving ads on the board ─────────────────────────
 
 /** Moves one of this client's ads to another column. Only ads linked to this client can be moved. */
+/** The board's columns: every Ad Creatives Status in Notion's order, except Rejected and Unused. */
+export async function getAdStatuses(): Promise<string[]> {
+  try {
+    return await notion.queryAdStatuses();
+  } catch {
+    // Details are logged in notion.ts. Fall back to the statuses the ads themselves use.
+    return [];
+  }
+}
+
 export async function moveClientAd(clientId: string, adId: string, stage: AdStage): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!isAdStage(stage)) return { ok: false, error: "That column doesn't exist." };
+  if (!(await notion.queryAdStatuses().catch(() => [] as string[])).includes(stage)) return { ok: false, error: "That column doesn't exist." };
   const ad = await notion.getAdPage(adId);
   if (!ad || !ad.clientIds.some((id) => sameId(id, clientId))) return { ok: false, error: "We couldn't find that ad." };
   if (ad.stage === stage) return { ok: true };

@@ -47,8 +47,9 @@ export interface TaskRecord extends Task {
 }
 
 // An ad from the Ad Creatives database, as a client sees it on their Ads board.
-// The Ad Creatives Status in Notion. Rejected and Unused ads are never shown to clients.
-export type AdStage = "Not started" | "Scripting" | "Script review" | "Ready to film" | "Filmed" | "Editing" | "Ready for upload" | "Live";
+// An Ad Creatives Status in Notion, e.g. "Ready to film". The board's columns are
+// read from the database, so this is whatever statuses it has (minus Rejected and Unused).
+export type AdStage = string;
 export interface AdCreative {
   id: string;
   name: string; // "Ad ID" in Notion

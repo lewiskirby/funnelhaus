@@ -3,7 +3,7 @@
 
 import "server-only";
 import { cache } from "react";
-import { isAdStage } from "@/lib/ads";
+import { HIDDEN_STATUSES } from "@/lib/ads";
 import { offsetLabel } from "@/lib/calendar";
 import type { AdCreative, Client, ClientEvent, ClientIcon, ContentBlock, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
@@ -429,7 +429,7 @@ type AdRecord = AdCreative & { clientIds: string[] };
 function toAd(page: Page): AdRecord | null {
   const p = page.properties;
   const stage = option(p["Status"]) || "Not started";
-  if (!isAdStage(stage)) return null; // Rejected, Unused or an unknown status
+  if (HIDDEN_STATUSES.includes(stage)) return null; // Rejected and Unused are never shown
   return {
     id: page.id,
     name: text(p["Ad ID"]) || "Untitled ad",
@@ -440,6 +440,19 @@ function toAd(page: Page): AdRecord | null {
     driveUrl: safeUrl(p["File Drive Link"]?.url),
     clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
   };
+}
+
+let adStatusCache: { at: number; statuses: Promise<string[]> } | undefined;
+
+/** The Status options of Ad Creatives in Notion's order, minus the hidden ones. Kept for a minute. */
+export async function queryAdStatuses(): Promise<string[]> {
+  if (adStatusCache && Date.now() - adStatusCache.at < CONTENT_TTL_MS) return adStatusCache.statuses;
+  const statuses = notion<{ properties: Record<string, { status?: { options: { name: string }[] } }> }>(`/data_sources/${ADS_DS}`).then((ds) =>
+    (ds.properties["Status"]?.status?.options ?? []).map((o) => o.name).filter((n) => !HIDDEN_STATUSES.includes(n)),
+  );
+  adStatusCache = { at: Date.now(), statuses };
+  statuses.catch(() => (adStatusCache = undefined)); // don't keep failures
+  return statuses;
 }
 
 /** Sets an ad's Status (a Notion status property). */

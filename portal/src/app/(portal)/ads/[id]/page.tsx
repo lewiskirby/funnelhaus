@@ -14,7 +14,6 @@ export async function generateMetadata({ params }: PageProps<"/ads/[id]">): Prom
 }
 
 const WHAT_TO_DO: Partial<Record<string, string>> = {
-  "Script review": "Read the script below. If you'd like any changes, tell us in your Slack channel or reply to any of our emails. Once you're happy, we'll get it ready to film.",
   "Ready to film": "Film this ad using the script below, then upload the footage to the Ad Creative Uploads folder inside your Asset upload folder (linked on your Home page) and let us know.",
 };
 
@@ -25,7 +24,7 @@ export default async function AdPage({ params }: PageProps<"/ads/[id]">) {
   if (!found) notFound();
   const { ad, content } = found;
   const column = columnFor(ad.stage);
-  const due = ad.due && column.clientTurn ? dueLabel(ad.due) : null;
+  const due = ad.due ? dueLabel(ad.due) : null;
   const todo = WHAT_TO_DO[ad.stage];
 
   return (
@@ -37,9 +36,7 @@ export default async function AdPage({ params }: PageProps<"/ads/[id]">) {
       <article className="card overflow-hidden">
         <header className="space-y-3 border-b border-line p-7 sm:p-10">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${column.clientTurn ? "bg-brand text-white" : "bg-canvas text-muted ring-1 ring-line"}`}>
-              {column.clientTurn ? `Your turn: ${column.clientTurn.toLowerCase()}` : column.title}
-            </span>
+            <span className="rounded-full bg-canvas px-2.5 py-1 text-[12px] font-semibold text-muted ring-1 ring-line">{column.title}</span>
             {due && <span className={`rounded-full px-2.5 py-1 text-[12px] font-medium ${due.tone === "overdue" ? "bg-brand-soft text-brand" : "bg-canvas text-muted ring-1 ring-line"}`}>{due.text}</span>}
           </div>
           <h1 className="text-[28px] leading-tight font-bold tracking-[-0.02em] break-words text-ink sm:text-[32px]">{ad.name}</h1>

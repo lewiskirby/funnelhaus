@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { AD_COLUMNS, columnFor, dueLabel } from "@/lib/ads";
+import { dueLabel, type AdColumn } from "@/lib/ads";
 import type { AdCreative, AdStage } from "@/lib/types";
 import { moveAd } from "./actions";
 
@@ -16,7 +16,7 @@ const TONE = {
  * The ads board. Drag a card to another column (or use "Move to" on phones) and
  * its Status changes in Notion. The card moves straight away and moves back if saving fails.
  */
-export function AdBoard({ ads, focus }: { ads: AdCreative[]; focus?: AdStage }) {
+export function AdBoard({ ads, columns }: { ads: AdCreative[]; columns: AdColumn[] }) {
   const [moved, setMoved] = useState<Record<string, AdStage>>({});
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<AdStage | null>(null);
@@ -47,15 +47,13 @@ export function AdBoard({ ads, focus }: { ads: AdCreative[]; focus?: AdStage }) 
         </p>
       )}
       <div className="flex snap-x snap-mandatory items-start gap-4">
-        {AD_COLUMNS.map((column) => {
+        {columns.map((column) => {
           const cards = ads.filter((ad) => stageOf(ad) === column.stage);
-          const theirs = Boolean(column.clientTurn);
           const isOver = over === column.stage && dragging !== null;
           return (
             <section
               key={column.stage}
               aria-label={column.title}
-              data-focus={column.stage === focus ? "" : undefined}
               onDragOver={(e) => {
                 if (!dragging) return;
                 e.preventDefault();
@@ -73,16 +71,15 @@ export function AdBoard({ ads, focus }: { ads: AdCreative[]; focus?: AdStage }) 
                 setDragging(null);
               }}
               className={`flex min-h-[220px] w-[78vw] max-w-[300px] shrink-0 snap-start flex-col rounded-2xl p-3 transition sm:w-[280px] ${
-                isOver ? "bg-white ring-2 ring-brand/50" : theirs ? "bg-brand-soft/70 ring-1 ring-brand/15" : "bg-canvas ring-1 ring-line"
+                isOver ? "bg-white ring-2 ring-brand/50" : "bg-canvas ring-1 ring-line"
               }`}
             >
               <div className="px-1.5 pt-1 pb-3">
                 <div className="flex items-center gap-2">
                   <h2 className="text-[14.5px] font-semibold text-ink">{column.title}</h2>
                   <span className="rounded-full bg-white px-2 py-0.5 text-[11.5px] font-semibold text-muted ring-1 ring-line">{cards.length}</span>
-                  {theirs && <span className="ml-auto rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold text-white">Your turn</span>}
                 </div>
-                <p className="mt-1 text-[12.5px] leading-snug text-muted">{column.hint}</p>
+                {column.hint && <p className="mt-1 text-[12.5px] leading-snug text-muted">{column.hint}</p>}
               </div>
               <ul className="flex-1 space-y-2.5">
                 {cards.length === 0 && (
@@ -101,6 +98,7 @@ export function AdBoard({ ads, focus }: { ads: AdCreative[]; focus?: AdStage }) 
                       setDragging(null);
                       setOver(null);
                     }}
+                    columns={columns}
                     onMove={(stage) => move(ad, stage)}
                   />
                 ))}
@@ -119,6 +117,7 @@ function AdCard({
   dragging,
   onDragStart,
   onDragEnd,
+  columns,
   onMove,
 }: {
   ad: AdCreative;
@@ -126,10 +125,10 @@ function AdCard({
   dragging: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
+  columns: AdColumn[];
   onMove: (stage: AdStage) => void;
 }) {
-  const turn = columnFor(stage).clientTurn;
-  const due = ad.due && turn ? dueLabel(ad.due) : null;
+  const due = ad.due ? dueLabel(ad.due) : null;
   return (
     <li
       draggable
@@ -148,10 +147,9 @@ function AdCard({
         {(ad.format || ad.lengthSeconds) && (
           <p className="mt-1 text-[12.5px] text-muted">{[ad.format, ad.lengthSeconds && `${ad.lengthSeconds}s`].filter(Boolean).join(" · ")}</p>
         )}
-        {(turn || due) && (
+        {due && (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {turn && <span className="rounded-full bg-brand px-2 py-0.5 text-[11.5px] font-semibold text-white">{turn}</span>}
-            {due && <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${TONE[due.tone]}`}>{due.text}</span>}
+            <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${TONE[due.tone]}`}>{due.text}</span>
           </div>
         )}
       </Link>
@@ -163,7 +161,7 @@ function AdCard({
           onChange={(e) => onMove(e.target.value as AdStage)}
           className="w-full cursor-pointer bg-transparent text-[12.5px] font-medium text-muted focus:outline-none"
         >
-          {AD_COLUMNS.map((c) => (
+          {columns.map((c) => (
             <option key={c.stage} value={c.stage}>
               {c.stage === stage ? `In ${c.title}` : `Move to ${c.title}`}
             </option>

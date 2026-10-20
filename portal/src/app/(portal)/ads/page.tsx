@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { NotionContent } from "@/components/notion-content";
 import { Icon } from "@/components/ui";
-import { clientTurnAds, dueLabel } from "@/lib/ads";
-import { getClientAds, getFilmingGuide } from "@/lib/data";
+import { columnFor } from "@/lib/ads";
+import { getAdStatuses, getClientAds, getFilmingGuide } from "@/lib/data";
 import { getSession, requireClient } from "@/lib/session";
 import { AdBoard } from "./ad-board";
 import { BoardScroller } from "./board-scroller";
@@ -16,7 +16,9 @@ const NOTION_ADS_URL = "https://app.notion.com/p/lewisdkkirby/ac904bbfdb008257a7
 
 export default async function AdsPage() {
   const client = await requireClient();
-  const [ads, guide, session] = await Promise.all([getClientAds(client.id), getFilmingGuide(), getSession()]);
+  const [ads, guide, session, statuses] = await Promise.all([getClientAds(client.id), getFilmingGuide(), getSession(), getAdStatuses()]);
+  // Columns follow Notion; any status an ad uses that isn't in the list yet still gets a column.
+  const columns = [...new Set([...statuses, ...ads.map((a) => a.stage)])].map(columnFor);
   const guideCard = (
     <FilmingGuide>
       {guide.length > 0 ? (
@@ -28,12 +30,6 @@ export default async function AdsPage() {
   );
 
   if (ads.length === 0) return <ComingSoon guide={guideCard} />;
-
-  const yourTurn = clientTurnAds(ads);
-  const focus = yourTurn[0]?.stage;
-  const toReview = yourTurn.filter((a) => a.stage === "Script review").length;
-  const toFilm = yourTurn.filter((a) => a.stage === "Ready to film").length;
-  const needs = [toReview && `review ${toReview} script${toReview === 1 ? "" : "s"}`, toFilm && `film ${toFilm} ad${toFilm === 1 ? "" : "s"}`].filter(Boolean);
 
   return (
     <div className="space-y-8">
@@ -56,32 +52,16 @@ export default async function AdsPage() {
 
       {guideCard}
 
-      {yourTurn.length > 0 ? (
-        <section className="flex items-start gap-3.5 rounded-2xl bg-ink-2 px-5 py-4 text-white sm:px-6">
-          <span className="text-xl leading-6">🪄</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-medium">
-              {yourTurn.length} ad{yourTurn.length === 1 ? " needs" : "s need"} you: {needs.join(" and ")}.
-            </p>
-            {yourTurn[0].due && <p className="mt-0.5 text-[13.5px] text-white/60">Next: {dueLabel(yourTurn[0].due).text}</p>}
-          </div>
-        </section>
-      ) : (
-        <p className="flex items-center gap-2 rounded-2xl bg-success-soft px-5 py-4 text-[14.5px] font-medium text-success">
-          <Icon.check className="size-4" strokeWidth={2} /> Nothing needs you right now. We&apos;ll add ads here when it&apos;s your turn.
-        </p>
-      )}
-
       {/* Board: columns scroll sideways on smaller screens */}
       <BoardScroller>
-        <AdBoard ads={ads} focus={focus} />
+        <AdBoard ads={ads} columns={columns} />
       </BoardScroller>
     </div>
   );
 }
 
 // Placeholder cards shown blurred behind the "coming soon" message.
-const PREVIEW = ["Scripting", "Script review", "Ready to film", "Live"];
+const PREVIEW = ["Scripting", "Ready to film", "Editing", "Live"];
 
 function ComingSoon({ guide }: { guide: ReactNode }) {
   return (
