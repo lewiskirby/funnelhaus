@@ -1,15 +1,13 @@
 "use server";
 
 import {
-  addMilestoneComment,
   getCalendarItem,
-  getMilestoneComments,
   getMilestoneEditor,
   saveMilestoneEdits,
   setMilestoneApproval,
 } from "@/lib/data";
 import { getSession, requireClient } from "@/lib/session";
-import type { BlockEdits, ContentBlock, EditableBlock, LaunchTask, MilestoneComment } from "@/lib/types";
+import type { BlockEdits, ContentBlock, EditableBlock, LaunchTask } from "@/lib/types";
 
 export type CalendarItemResult = { item: LaunchTask; blocks: ContentBlock[] } | { error: string };
 type Result = { ok: true } | { ok: false; error: string };
@@ -43,23 +41,6 @@ export async function undoMilestoneApproval(id: string): Promise<Result> {
   const client = await requireClient();
   if (!validId(id)) return notFound;
   return setMilestoneApproval(client.id, id, null);
-}
-
-export async function loadMilestoneComments(id: string): Promise<{ comments: MilestoneComment[] } | { error: string }> {
-  const client = await requireClient();
-  if (!validId(id)) return { error: notFound.error };
-  try {
-    const comments = await getMilestoneComments(client.id, id);
-    return comments ? { comments } : { error: notFound.error };
-  } catch {
-    return { error: "We couldn't load the comments." };
-  }
-}
-
-export async function postMilestoneComment(id: string, body: string): Promise<Result> {
-  const client = await requireClient();
-  if (!validId(id) || typeof body !== "string") return notFound;
-  return addMilestoneComment(client.id, id, await signedInName(), body);
 }
 
 export async function loadMilestoneEditor(id: string): Promise<{ blocks: EditableBlock[] } | { error: string }> {

@@ -1,31 +1,30 @@
 "use client";
 
-// Milestone tools in the calendar pop-up: approve (or undo), edit the page's
-// text, and comment. Everything is saved straight to the milestone in Notion.
+// Milestone tools in the calendar pop-up: approve (or undo) and edit the page's
+// text. Everything is saved straight to the milestone in Notion.
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Rich } from "@/components/rich-text";
 import { Icon } from "@/components/ui";
-import { BLOCK_TEXT_MAX, COMMENT_MAX } from "@/lib/limits";
-import type { BlockEdits, EditableBlock, LaunchTask, MilestoneComment } from "@/lib/types";
+import { BLOCK_TEXT_MAX } from "@/lib/limits";
+import type { BlockEdits, EditableBlock, LaunchTask } from "@/lib/types";
 import {
   approveMilestone,
-  loadMilestoneComments,
   loadMilestoneEditor,
-  postMilestoneComment,
   saveMilestone,
   undoMilestoneApproval,
 } from "./actions";
 
 const primary =
   "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40";
+// Approve is a plain dark button, so it never looks already chosen.
+const approveClass =
+  "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 text-[14px] font-semibold text-white transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40";
 const secondary =
   "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-card px-5 text-[14px] font-semibold text-ink ring-1 ring-line transition hover:ring-ink/30 disabled:cursor-not-allowed disabled:opacity-40";
 const fieldClass =
   "block w-full resize-none rounded-xl border border-line bg-white px-3.5 py-2.5 text-[15px] leading-relaxed text-ink outline-none transition placeholder:text-faint focus:border-brand focus:ring-4 focus:ring-brand/10";
 
-const formatWhen = (iso: string, withTime = false) =>
-  new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}) });
+const formatWhen = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short" });
 
 function ErrorNote({ error }: { error?: string }) {
   if (!error) return null;
@@ -38,7 +37,7 @@ function ErrorNote({ error }: { error?: string }) {
 
 // ── Approval ────────────────────────────────────────
 
-/** Approve and Edit buttons, or who approved it with a way to undo. */
+/** Edit and Approve buttons under the milestone, or who approved it with a way to undo. */
 export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onEdit: () => void; onChanged: () => void }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
@@ -53,7 +52,7 @@ export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onE
   }
 
   return (
-    <div className="mb-5 space-y-3">
+    <div className="mt-6 space-y-3">
       {item.approved ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-success-soft px-4 py-3">
           <p className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold text-success">
@@ -74,12 +73,12 @@ export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onE
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2.5">
-          <button type="button" disabled={pending} onClick={() => run(approveMilestone)} className={primary}>
-            <Icon.check className="size-4" strokeWidth={2.25} />
-            {pending ? "Approving…" : "Approve"}
-          </button>
           <button type="button" disabled={pending} onClick={onEdit} className={secondary}>
+            <Icon.pencil className="size-4" />
             Edit
+          </button>
+          <button type="button" disabled={pending} onClick={() => run(approveMilestone)} className={approveClass}>
+            {pending ? "Approving…" : "Approve"}
           </button>
         </div>
       )}
@@ -281,99 +280,5 @@ export function MilestoneEditor({ id, onSaved, onCancel }: { id: string; onSaved
         </button>
       </div>
     </div>
-  );
-}
-
-// ── Comments ────────────────────────────────────────
-
-/** The milestone's comments in Notion, oldest first, with a box to add one. */
-export function MilestoneComments({ id }: { id: string }) {
-  const [comments, setComments] = useState<MilestoneComment[] | null>(null);
-  const [loadError, setLoadError] = useState<string>();
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string>();
-  const [pending, start] = useTransition();
-
-  async function load() {
-    const result = await loadMilestoneComments(id).catch(() => ({ error: "We couldn't load the comments." }));
-    if ("comments" in result) {
-      setComments(result.comments);
-      setLoadError(undefined);
-    } else setLoadError(result.error);
-  }
-
-  useEffect(() => {
-    let live = true;
-    loadMilestoneComments(id)
-      .catch(() => ({ error: "We couldn't load the comments." }))
-      .then((result) => {
-        if (!live) return;
-        if ("comments" in result) setComments(result.comments);
-        else setLoadError(result.error);
-      });
-    return () => {
-      live = false;
-    };
-  }, [id]);
-
-  function post(e: React.FormEvent) {
-    e.preventDefault();
-    setError(undefined);
-    start(async () => {
-      const result = await postMilestoneComment(id, value).catch(() => ({ ok: false as const, error: "We couldn't post that comment. Please try again." }));
-      if (!result.ok) return setError(result.error);
-      setValue("");
-      await load();
-    });
-  }
-
-  return (
-    <section aria-labelledby="milestone-comments" className="mt-7 border-t border-line pt-6">
-      <h3 id="milestone-comments" className="mb-3 flex items-center gap-2 text-[15px] font-bold text-ink">
-        <Icon.chat className="size-4" /> Comments
-      </h3>
-      {loadError ? (
-        <p className="mb-3 text-[13.5px] text-muted">{loadError}</p>
-      ) : !comments ? (
-        <div className="mb-3 h-12 animate-pulse rounded-xl bg-canvas" aria-label="Loading comments" />
-      ) : comments.length === 0 ? (
-        <p className="mb-3 text-[13.5px] text-muted">No comments yet.</p>
-      ) : (
-        <ul className="mb-4 space-y-2.5">
-          {comments.map((c) => (
-            <li key={c.id} className={`rounded-2xl px-4 py-3 ${c.team ? "bg-brand-soft" : "bg-canvas ring-1 ring-line"}`}>
-              <p className="mb-1 flex flex-wrap items-baseline gap-x-2 text-[12.5px]">
-                <span className="font-semibold text-ink">{c.author}</span>
-                <time dateTime={c.at} className="text-faint">
-                  {formatWhen(c.at, true)}
-                </time>
-              </p>
-              <p className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap text-body">
-                <Rich parts={c.text} />
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form onSubmit={post} className="space-y-2.5">
-        <label htmlFor="milestone-comment" className="sr-only">
-          Add a comment
-        </label>
-        <AutoTextarea
-          id="milestone-comment"
-          value={value}
-          maxLength={COMMENT_MAX}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Add a comment for the FunnelHaus team…"
-          className={`${fieldClass} min-h-20`}
-        />
-        <ErrorNote error={error} />
-        <div className="flex justify-end">
-          <button type="submit" disabled={pending || !value.trim()} className={primary}>
-            {pending ? "Posting…" : "Post comment"}
-          </button>
-        </div>
-      </form>
-    </section>
   );
 }

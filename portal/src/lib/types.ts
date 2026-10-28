@@ -87,15 +87,6 @@ export interface LaunchTask {
   approved?: { by: string; on?: string }; // milestones only: "Client Approved" ticked, with who and when
 }
 
-// A page comment on a milestone, from the portal or from Notion.
-export interface MilestoneComment {
-  id: string;
-  author: string;
-  team: boolean; // written by FunnelHaus (in Notion, or by an admin in the portal)
-  at: string; // ISO date-time
-  text: RichText[];
-}
-
 // One top-level block of a milestone page in the portal's editor. Text blocks
 // can be edited; everything else (images, tables, sub-pages) stays as it is.
 export type EditableBlock =

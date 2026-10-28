@@ -96,6 +96,12 @@ export const Icon = {
   target: (p: IconProps) => (
     <svg {...base(p)}><circle cx="10" cy="10" r="7" /><circle cx="10" cy="10" r="3.5" /><circle cx="10" cy="10" r=".5" fill="currentColor" /></svg>
   ),
+  copy: (p: IconProps) => (
+    <svg {...base(p)}><rect x="7" y="7" width="10" height="10" rx="2" /><path d="M13 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" /></svg>
+  ),
+  pencil: (p: IconProps) => (
+    <svg {...base(p)}><path d="M13.5 3.5a2.1 2.1 0 0 1 3 3L7 16l-4 1 1-4 9.5-9.5Z" /><path d="m12 5 3 3" /></svg>
+  ),
   chevronRight: (p: IconProps) => (
     <svg {...base(p)}><path d="m8 5 5 5-5 5" /></svg>
   ),

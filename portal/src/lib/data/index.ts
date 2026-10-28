@@ -7,8 +7,8 @@ import "server-only";
 import { cache } from "react";
 import * as notion from "./notion";
 import { sendPortalEmail } from "@/lib/email";
-import { ANSWER_MAX, BLOCK_TEXT_MAX, COMMENT_MAX } from "@/lib/limits";
-import type { AdCreative, AdStage, BlockEdits, Client, ClientEvent, ContentBlock, EditableBlock, LaunchTask, MilestoneComment, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
+import { ANSWER_MAX, BLOCK_TEXT_MAX } from "@/lib/limits";
+import type { AdCreative, AdStage, BlockEdits, Client, ClientEvent, ContentBlock, EditableBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete"];
@@ -540,7 +540,7 @@ export async function getCalendarItem(clientId: string, id: string): Promise<{ i
   return { item: withoutClients(item), blocks };
 }
 
-// ── Milestone approval, comments and edits ──────────
+// ── Milestone approval and edits ────────────
 // Only milestones on this client's calendar. Approving locks editing until
 // the approval is undone, so nothing changes after sign-off unnoticed.
 
@@ -560,24 +560,6 @@ export async function setMilestoneApproval(clientId: string, id: string, by: str
     return { ok: true };
   } catch {
     return { ok: false, error: "We couldn't save that. Please try again." };
-  }
-}
-
-export async function getMilestoneComments(clientId: string, id: string): Promise<MilestoneComment[] | null> {
-  if (!(await findOwnedMilestone(clientId, id))) return null;
-  return notion.queryPageComments(id);
-}
-
-export async function addMilestoneComment(clientId: string, id: string, name: string, body: string): Promise<MilestoneResult> {
-  const text = body.trim();
-  if (!text) return { ok: false, error: "Write a comment first." };
-  if (text.length > COMMENT_MAX) return { ok: false, error: `Comments can be up to ${COMMENT_MAX.toLocaleString("en-GB")} characters.` };
-  if (!(await findOwnedMilestone(clientId, id))) return { ok: false, error: "We couldn't find that milestone." };
-  try {
-    await notion.createPageComment(id, name, text);
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "We couldn't post that comment. Please try again." };
   }
 }
 

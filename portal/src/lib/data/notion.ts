@@ -5,7 +5,7 @@ import "server-only";
 import { cache } from "react";
 import { HIDDEN_STATUSES } from "@/lib/ads";
 import { offsetLabel } from "@/lib/calendar";
-import type { AdCreative, BlockEdits, Client, ClientEvent, ClientIcon, ContentBlock, EditableBlock, LaunchTask, MilestoneComment, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, BlockEdits, Client, ClientEvent, ClientIcon, ContentBlock, EditableBlock, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -586,67 +586,6 @@ export async function setApprovalInNotion(id: string, by: string | null): Promis
         "Approved by": { rich_text: by ? [{ type: "text", text: { content: by.slice(0, 200) } }] : [] },
         "Approved on": { date: by ? { start: new Date().toISOString() } : null },
       },
-    },
-  });
-}
-
-// ── Milestone comments ──────────────────────────────
-// Page comments in Notion. Comments from the portal are written by the
-// integration under a custom name ("Jane · Acme"); anyone else is FunnelHaus
-// commenting in Notion.
-
-type NotionComment = {
-  id: string;
-  created_time: string;
-  created_by: { id: string };
-  rich_text: NotionRichText[];
-  display_name?: { resolved_name?: string };
-};
-
-let botId: Promise<string> | undefined;
-function integrationId(): Promise<string> {
-  botId ??= notion<{ id: string }>(`/users/me`).then((u) => u.id);
-  botId.catch(() => (botId = undefined));
-  return botId;
-}
-
-/** Page comments on a tracker page, oldest first. */
-export async function queryPageComments(pageId: string): Promise<MilestoneComment[]> {
-  const [bot, comments] = await Promise.all([
-    integrationId(),
-    (async () => {
-      const all: NotionComment[] = [];
-      let cursor: string | undefined;
-      do {
-        const res = await notion<{ results: NotionComment[]; has_more: boolean; next_cursor: string | null }>(
-          `/comments?block_id=${pageId}&page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`,
-        );
-        all.push(...res.results);
-        cursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
-      } while (cursor);
-      return all;
-    })(),
-  ]);
-  return comments.map((c) => {
-    const name = c.display_name?.resolved_name?.trim() || "FunnelHaus";
-    const fromPortal = normalise(c.created_by.id) === normalise(bot);
-    return {
-      id: c.id,
-      author: name,
-      team: !fromPortal || name.endsWith("· FunnelHaus"),
-      at: c.created_time,
-      text: toRichText(c.rich_text),
-    };
-  });
-}
-
-export async function createPageComment(pageId: string, name: string, body: string): Promise<void> {
-  await notion(`/comments`, {
-    method: "POST",
-    body: {
-      parent: { page_id: pageId },
-      rich_text: chunk(body).map((content) => ({ type: "text", text: { content } })),
-      display_name: { type: "custom", custom: { name: name.slice(0, 100) } },
     },
   });
 }

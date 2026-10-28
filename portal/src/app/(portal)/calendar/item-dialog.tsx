@@ -8,7 +8,7 @@ import { Icon } from "@/components/ui";
 import { formatDay } from "@/lib/calendar";
 import type { ContentBlock, RichText } from "@/lib/types";
 import { openCalendarItem, type CalendarItemResult } from "./actions";
-import { ApprovalBar, MilestoneComments, MilestoneEditor } from "./milestone";
+import { ApprovalBar, MilestoneEditor } from "./milestone";
 
 const dialogClass =
   "mx-0 mb-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto overscroll-contain rounded-t-3xl bg-card p-0 text-body shadow-2xl transition duration-200 ease-out backdrop:bg-ink/40 starting:translate-y-full sm:m-auto sm:max-w-xl sm:rounded-3xl sm:starting:translate-y-2 sm:starting:opacity-0";
@@ -125,8 +125,6 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
         </button>
       </div>
 
-      {item?.milestone && !editing && <ApprovalBar item={item} onEdit={() => setEditing(true)} onChanged={onChanged} />}
-
       {!result ? (
         <div className="space-y-3" aria-label="Loading">
           {[100, 90, 70].map((w) => (
@@ -150,17 +148,23 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
         <div className="space-y-5">
           {hasLinks && item?.links && <ClientLinks rich={item.links} />}
           {blocks.length > 0 && (
-            <div>
-              <CopyButton text={toPlainText(blocks)} />
-              <div className="mt-4">
-                <NotionContent blocks={blocks} />
+            <div className="rounded-2xl p-4 ring-1 ring-line sm:p-5">
+              {/* Floated so the text wraps around the icons instead of running under them. */}
+              <div className="float-right -mt-1.5 -mr-1.5 ml-3 flex items-center gap-0.5">
+                {item?.milestone && !item.approved && (
+                  <IconButton label="Edit" onClick={() => setEditing(true)}>
+                    <Icon.pencil className="size-[18px]" />
+                  </IconButton>
+                )}
+                <CopyButton text={toPlainText(blocks)} />
               </div>
+              <NotionContent blocks={blocks} />
             </div>
           )}
         </div>
       )}
 
-      {item?.milestone && !editing && <MilestoneComments id={item.id} />}
+      {item?.milestone && !editing && <ApprovalBar item={item} onEdit={() => setEditing(true)} onChanged={onChanged} />}
     </div>
   );
 }
@@ -185,6 +189,23 @@ function ClientLinks({ rich }: { rich: RichText[] }) {
   );
 }
 
+function IconButton({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex size-9 items-center justify-center rounded-lg transition ${
+        active ? "bg-success-soft text-success" : "text-muted hover:bg-canvas hover:text-ink"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Copies the page's text; the icon turns into a tick for a moment. */
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -197,16 +218,9 @@ function CopyButton({ text }: { text: string }) {
     }
   }
   return (
-    <button
-      type="button"
-      onClick={copy}
-      className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-semibold transition ${
-        copied ? "bg-success-soft text-success" : "bg-ink text-white hover:bg-ink-2"
-      }`}
-    >
-      {copied ? <Icon.check className="size-4" strokeWidth={2} /> : null}
-      {copied ? "Copied" : "Copy text"}
-    </button>
+    <IconButton label={copied ? "Copied" : "Copy text"} onClick={copy} active={copied}>
+      {copied ? <Icon.check className="size-[18px]" strokeWidth={2} /> : <Icon.copy className="size-[18px]" />}
+    </IconButton>
   );
 }
 
