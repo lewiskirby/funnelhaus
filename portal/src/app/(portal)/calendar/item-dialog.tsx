@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui";
 import { formatDay } from "@/lib/calendar";
 import type { ContentBlock, RichText } from "@/lib/types";
 import { openCalendarItem, type CalendarItemResult } from "./actions";
+import { ApprovalBar, MilestoneComments, MilestoneEditor } from "./milestone";
 
 const dialogClass =
   "mx-0 mb-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto overscroll-contain rounded-t-3xl bg-card p-0 text-body shadow-2xl transition duration-200 ease-out backdrop:bg-ink/40 starting:translate-y-full sm:m-auto sm:max-w-xl sm:rounded-3xl sm:starting:translate-y-2 sm:starting:opacity-0";
@@ -27,6 +28,15 @@ export function CalendarItems({ children }: { children: ReactNode }) {
   function open(id: string, title: string) {
     const current = ++session.current;
     setOpened({ id, title, session: current });
+    load(id, current);
+  }
+
+  /** Fetches the item again after an approval or edit, keeping the pop-up open. */
+  function reload() {
+    if (opened) load(opened.id, opened.session);
+  }
+
+  function load(id: string, current: number) {
     openCalendarItem(id)
       .catch((): CalendarItemResult => ({ error: "We couldn't load this. Please try again." }))
       // Ignore a slow answer for an item that has since been closed or swapped.
@@ -53,7 +63,7 @@ export function CalendarItems({ children }: { children: ReactNode }) {
           if (pressedBackdrop.current && e.target === e.currentTarget) close();
         }}
       >
-        {opened && <ItemSheet key={opened.session} opened={opened} onClose={close} />}
+        {opened && <ItemSheet key={opened.session} opened={opened} onClose={close} onChanged={reload} />}
       </dialog>
     </OpenContext.Provider>
   );
@@ -69,7 +79,8 @@ export function OpenItem({ id, title, className, children }: { id: string; title
   );
 }
 
-function ItemSheet({ opened, onClose }: { opened: Opened; onClose: () => void }) {
+function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: () => void; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false);
   const result = opened.result;
   const item = result && "item" in result ? result.item : null;
   const blocks = result && "blocks" in result ? result.blocks : [];
@@ -114,6 +125,8 @@ function ItemSheet({ opened, onClose }: { opened: Opened; onClose: () => void })
         </button>
       </div>
 
+      {item?.milestone && !editing && <ApprovalBar item={item} onEdit={() => setEditing(true)} onChanged={onChanged} />}
+
       {!result ? (
         <div className="space-y-3" aria-label="Loading">
           {[100, 90, 70].map((w) => (
@@ -122,6 +135,15 @@ function ItemSheet({ opened, onClose }: { opened: Opened; onClose: () => void })
         </div>
       ) : "error" in result ? (
         <p className="rounded-xl bg-brand-soft px-4 py-3 text-[14px] text-brand">{result.error}</p>
+      ) : item?.milestone && editing && !item.approved ? (
+        <MilestoneEditor
+          id={item.id}
+          onCancel={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            onChanged();
+          }}
+        />
       ) : empty ? (
         <p className="rounded-2xl bg-canvas px-5 py-8 text-center text-[17px] font-semibold tracking-wide text-muted ring-1 ring-line">TBC</p>
       ) : (
@@ -137,6 +159,8 @@ function ItemSheet({ opened, onClose }: { opened: Opened; onClose: () => void })
           )}
         </div>
       )}
+
+      {item?.milestone && !editing && <MilestoneComments id={item.id} />}
     </div>
   );
 }

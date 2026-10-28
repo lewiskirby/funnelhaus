@@ -5,7 +5,7 @@ import "server-only";
 import { cache } from "react";
 import { HIDDEN_STATUSES } from "@/lib/ads";
 import { offsetLabel } from "@/lib/calendar";
-import type { AdCreative, Client, ClientEvent, ClientIcon, ContentBlock, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, BlockEdits, Client, ClientEvent, ClientIcon, ContentBlock, EditableBlock, LaunchTask, MilestoneComment, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -483,7 +483,8 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
 // ── Project Management Tracker ──────────────────────
 // Home shows unfinished task titles for the week. The launch calendar shows
 // only rows with Milestone or Event ticked (title, Due Date, Done or not, page
-// icon, Client links, and the page body when opened). Assignee, Links and SOP are never read.
+// icon, Client links, and the page body when opened). Milestones also use
+// Client Approved, Approved by and Approved on. Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.
 
 /** Titles of this client's unfinished tracker tasks due between today and `days` from now. */
@@ -533,6 +534,9 @@ function toLaunchItem(page: Page): LaunchTask & { clientIds: string[] } {
     event: ticked(page, "Event"),
     icon: toIcon(page.icon),
     links: toRichText(p["Client links"]?.rich_text),
+    approved: ticked(page, "Milestone") && ticked(page, "Client Approved")
+      ? { by: text(p["Approved by"]) || "Your team", on: p["Approved on"]?.date?.start ?? undefined }
+      : undefined,
     clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
   };
 }
@@ -570,6 +574,81 @@ export async function getLaunchItemPage(id: string): Promise<(LaunchTask & { cli
   } catch {
     return null;
   }
+}
+
+/** Ticks Client Approved with who and when, or clears all three when `by` is null. */
+export async function setApprovalInNotion(id: string, by: string | null): Promise<void> {
+  await notion(`/pages/${id}`, {
+    method: "PATCH",
+    body: {
+      properties: {
+        "Client Approved": { checkbox: by !== null },
+        "Approved by": { rich_text: by ? [{ type: "text", text: { content: by.slice(0, 200) } }] : [] },
+        "Approved on": { date: by ? { start: new Date().toISOString() } : null },
+      },
+    },
+  });
+}
+
+// ── Milestone comments ──────────────────────────────
+// Page comments in Notion. Comments from the portal are written by the
+// integration under a custom name ("Jane · Acme"); anyone else is FunnelHaus
+// commenting in Notion.
+
+type NotionComment = {
+  id: string;
+  created_time: string;
+  created_by: { id: string };
+  rich_text: NotionRichText[];
+  display_name?: { resolved_name?: string };
+};
+
+let botId: Promise<string> | undefined;
+function integrationId(): Promise<string> {
+  botId ??= notion<{ id: string }>(`/users/me`).then((u) => u.id);
+  botId.catch(() => (botId = undefined));
+  return botId;
+}
+
+/** Page comments on a tracker page, oldest first. */
+export async function queryPageComments(pageId: string): Promise<MilestoneComment[]> {
+  const [bot, comments] = await Promise.all([
+    integrationId(),
+    (async () => {
+      const all: NotionComment[] = [];
+      let cursor: string | undefined;
+      do {
+        const res = await notion<{ results: NotionComment[]; has_more: boolean; next_cursor: string | null }>(
+          `/comments?block_id=${pageId}&page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`,
+        );
+        all.push(...res.results);
+        cursor = res.has_more ? (res.next_cursor ?? undefined) : undefined;
+      } while (cursor);
+      return all;
+    })(),
+  ]);
+  return comments.map((c) => {
+    const name = c.display_name?.resolved_name?.trim() || "FunnelHaus";
+    const fromPortal = normalise(c.created_by.id) === normalise(bot);
+    return {
+      id: c.id,
+      author: name,
+      team: !fromPortal || name.endsWith("· FunnelHaus"),
+      at: c.created_time,
+      text: toRichText(c.rich_text),
+    };
+  });
+}
+
+export async function createPageComment(pageId: string, name: string, body: string): Promise<void> {
+  await notion(`/comments`, {
+    method: "POST",
+    body: {
+      parent: { page_id: pageId },
+      rich_text: chunk(body).map((content) => ({ type: "text", text: { content } })),
+      display_name: { type: "custom", custom: { name: name.slice(0, 100) } },
+    },
+  });
 }
 
 // ── Page content ────────────────────────────────────
@@ -870,4 +949,77 @@ export async function setTableCellInNotion(rowId: string, cells: RichText[][], c
         ),
   );
   await notion(`/blocks/${rowId}`, { method: "PATCH", body: { table_row: { cells: out } } });
+}
+
+// ── Editing a milestone page ────────────────────────
+// Clients edit the text of top-level blocks. Unchanged blocks are never
+// written, so they keep their formatting; an edited block becomes plain text.
+
+const EDITABLE = new Set([...TEXT_BLOCKS, "to_do", "callout"]);
+const LOCKED_LABELS: Record<string, string> = {
+  image: "Image",
+  video: "Video",
+  file: "File",
+  pdf: "PDF",
+  table: "Table",
+  child_page: "Sub-page",
+  child_database: "Database",
+  divider: "Divider",
+  code: "Code",
+  bookmark: "Link",
+  embed: "Embed",
+};
+
+const plainOf = (block: Block) => (((block[block.type] ?? {}) as BlockData).rich_text ?? []).map((t) => t.plain_text).join("");
+const isFormatted = (block: Block) =>
+  (((block[block.type] ?? {}) as BlockData).rich_text ?? []).some((t) => t.href || Object.entries(t.annotations ?? {}).some(([k, v]) => k !== "color" && v === true));
+
+/** The page's top-level blocks, as the portal editor shows them. */
+export async function listEditableBlocks(pageId: string): Promise<EditableBlock[]> {
+  return (await listChildren(pageId)).map((b): EditableBlock => {
+    if (EDITABLE.has(b.type)) return { id: b.id, kind: "text", type: b.type, text: plainOf(b), formatted: isFormatted(b), hasChildren: b.has_children };
+    const title = b.type === "child_page" ? (b.child_page as { title?: string })?.title : undefined;
+    return { id: b.id, kind: "locked", label: title ? `Sub-page: ${title}` : (LOCKED_LABELS[b.type] ?? "Content") };
+  });
+}
+
+export class EditConflict extends Error {}
+
+const paragraph = (value: string) => ({ type: "paragraph", paragraph: { rich_text: chunk(value).map((content) => ({ type: "text", text: { content } })) } });
+
+/**
+ * Applies the editor's changes to the page's top-level blocks. Every block must
+ * still be on the page with the text the client started from, or nothing is written.
+ */
+export async function applyBlockEdits(pageId: string, edits: BlockEdits): Promise<void> {
+  const current = new Map((await listChildren(pageId)).map((b) => [normalise(b.id), b]));
+  const find = (id: string) => current.get(normalise(id));
+  for (const e of [...edits.updates, ...edits.deletes]) {
+    const block = find(e.id);
+    if (!block || !EDITABLE.has(block.type)) throw new EditConflict();
+    if (plainOf(block) !== e.from) throw new EditConflict();
+  }
+  for (const d of edits.deletes) if (find(d.id)!.has_children) throw new EditConflict();
+  for (const i of edits.inserts) if (i.after !== null && !find(i.after)) throw new EditConflict();
+
+  for (const u of edits.updates) {
+    const block = find(u.id)!;
+    const data = (block[block.type] ?? {}) as BlockData;
+    const body: Record<string, unknown> = { rich_text: chunk(u.text).map((content) => ({ type: "text", text: { content } })) };
+    if (block.type === "to_do") body.checked = Boolean(data.checked);
+    await notion(`/blocks/${block.id}`, { method: "PATCH", body: { [block.type]: body } });
+  }
+  // New paragraphs go in before anything is deleted, so they can sit after a block that's being removed.
+  // Each group goes in one call so its paragraphs keep their order.
+  for (const i of edits.inserts) {
+    if (!i.texts.length) continue;
+    await notion(`/blocks/${pageId}/children`, {
+      method: "PATCH",
+      body: {
+        children: i.texts.map(paragraph),
+        position: i.after ? { type: "after_block", after_block: { id: find(i.after)!.id } } : { type: "start" },
+      },
+    });
+  }
+  for (const d of edits.deletes) await notion(`/blocks/${find(d.id)!.id}`, { method: "DELETE" });
 }

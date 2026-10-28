@@ -84,7 +84,29 @@ export interface LaunchTask {
   event: boolean;
   icon?: ClientIcon; // the page's icon in Notion
   links?: RichText[]; // "Client links", e.g. registration or Zoom links
+  approved?: { by: string; on?: string }; // milestones only: "Client Approved" ticked, with who and when
 }
+
+// A page comment on a milestone, from the portal or from Notion.
+export interface MilestoneComment {
+  id: string;
+  author: string;
+  team: boolean; // written by FunnelHaus (in Notion, or by an admin in the portal)
+  at: string; // ISO date-time
+  text: RichText[];
+}
+
+// One top-level block of a milestone page in the portal's editor. Text blocks
+// can be edited; everything else (images, tables, sub-pages) stays as it is.
+export type EditableBlock =
+  | { id: string; kind: "text"; type: string; text: string; formatted: boolean; hasChildren: boolean }
+  | { id: string; kind: "locked"; label: string };
+
+export type BlockEdits = {
+  updates: { id: string; from: string; text: string }[]; // `from`: the text when the editor opened
+  inserts: { after: string | null; texts: string[] }[]; // new paragraphs after a block (null: at the start)
+  deletes: { id: string; from: string }[];
+};
 
 // A webinar registrant from the client's GoHighLevel, reduced to what the Results page needs.
 // No names, emails or phone numbers ever leave the server.

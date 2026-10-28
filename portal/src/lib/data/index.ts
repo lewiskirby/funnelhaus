@@ -7,8 +7,8 @@ import "server-only";
 import { cache } from "react";
 import * as notion from "./notion";
 import { sendPortalEmail } from "@/lib/email";
-import { ANSWER_MAX } from "@/lib/limits";
-import type { AdCreative, AdStage, Client, ClientEvent, ContentBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
+import { ANSWER_MAX, BLOCK_TEXT_MAX, COMMENT_MAX } from "@/lib/limits";
+import type { AdCreative, AdStage, BlockEdits, Client, ClientEvent, ContentBlock, EditableBlock, LaunchTask, MilestoneComment, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete"];
@@ -538,6 +538,89 @@ export async function getCalendarItem(clientId: string, id: string): Promise<{ i
     // Show the item as TBC rather than failing.
   }
   return { item: withoutClients(item), blocks };
+}
+
+// ── Milestone approval, comments and edits ──────────
+// Only milestones on this client's calendar. Approving locks editing until
+// the approval is undone, so nothing changes after sign-off unnoticed.
+
+type MilestoneResult = { ok: true } | { ok: false; error: string };
+
+async function findOwnedMilestone(clientId: string, id: string) {
+  const item = await notion.getLaunchItemPage(id);
+  return item && item.milestone && ownedBy(clientId)(item) ? item : null;
+}
+
+/** `by`: the name shown in Notion, or null to undo the approval. */
+export async function setMilestoneApproval(clientId: string, id: string, by: string | null): Promise<MilestoneResult> {
+  const item = await findOwnedMilestone(clientId, id);
+  if (!item) return { ok: false, error: "We couldn't find that milestone." };
+  try {
+    await notion.setApprovalInNotion(item.id, by);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't save that. Please try again." };
+  }
+}
+
+export async function getMilestoneComments(clientId: string, id: string): Promise<MilestoneComment[] | null> {
+  if (!(await findOwnedMilestone(clientId, id))) return null;
+  return notion.queryPageComments(id);
+}
+
+export async function addMilestoneComment(clientId: string, id: string, name: string, body: string): Promise<MilestoneResult> {
+  const text = body.trim();
+  if (!text) return { ok: false, error: "Write a comment first." };
+  if (text.length > COMMENT_MAX) return { ok: false, error: `Comments can be up to ${COMMENT_MAX.toLocaleString("en-GB")} characters.` };
+  if (!(await findOwnedMilestone(clientId, id))) return { ok: false, error: "We couldn't find that milestone." };
+  try {
+    await notion.createPageComment(id, name, text);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't post that comment. Please try again." };
+  }
+}
+
+/** The milestone's blocks for the editor, or an error if it's approved or not this client's. */
+export async function getMilestoneEditor(clientId: string, id: string): Promise<{ blocks: EditableBlock[] } | { error: string }> {
+  const item = await findOwnedMilestone(clientId, id);
+  if (!item) return { error: "We couldn't find that milestone." };
+  if (item.approved) return { error: "This milestone is approved. Undo the approval to edit it." };
+  try {
+    return { blocks: await notion.listEditableBlocks(id) };
+  } catch {
+    return { error: "We couldn't load this for editing. Please try again." };
+  }
+}
+
+const isId = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f-]{32,36}$/i.test(v);
+const isText = (v: unknown, max = BLOCK_TEXT_MAX): v is string => typeof v === "string" && v.length <= max;
+
+/** Checks the shape of edits sent from the browser. */
+function checkEdits(edits: BlockEdits): string | null {
+  if (!edits || !Array.isArray(edits.updates) || !Array.isArray(edits.inserts) || !Array.isArray(edits.deletes)) return "Something went wrong.";
+  if (edits.updates.length + edits.inserts.length + edits.deletes.length > 200) return "That's too many changes at once.";
+  if (!edits.updates.every((u) => isId(u?.id) && isText(u.from, 100_000) && isText(u.text))) return "Paragraphs can be up to 6,000 characters.";
+  if (!edits.deletes.every((d) => isId(d?.id) && isText(d.from, 100_000))) return "Something went wrong.";
+  if (!edits.inserts.every((i) => (i?.after === null || isId(i?.after)) && Array.isArray(i.texts) && i.texts.length <= 50 && i.texts.every((t) => isText(t))))
+    return "Paragraphs can be up to 6,000 characters.";
+  return null;
+}
+
+export async function saveMilestoneEdits(clientId: string, id: string, edits: BlockEdits): Promise<MilestoneResult> {
+  const invalid = checkEdits(edits);
+  if (invalid) return { ok: false, error: invalid };
+  const item = await findOwnedMilestone(clientId, id);
+  if (!item) return { ok: false, error: "We couldn't find that milestone." };
+  if (item.approved) return { ok: false, error: "This milestone is approved. Undo the approval to edit it." };
+  try {
+    await notion.applyBlockEdits(id, edits);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof notion.EditConflict)
+      return { ok: false, error: "Someone changed this while you were editing. Close it and open it again to see the latest version." };
+    return { ok: false, error: "We couldn't save every change. Close it and open it again to check what was saved." };
+  }
 }
 
 // ── Moving ads on the board ─────────────────────────
