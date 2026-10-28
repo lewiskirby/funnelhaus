@@ -508,10 +508,12 @@ const ownedBy = (clientId: string) => (item: { clientIds: string[] }) => item.cl
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const withoutClients = ({ clientIds, ...item }: LaunchTask & { clientIds: string[] }): LaunchTask => item;
 
-/** This client's milestones and events between two dates (YYYY-MM-DD). */
+/** This client's milestones and events between two dates (YYYY-MM-DD). Milestones say whether they have any content yet. */
 export async function getLaunchCalendar(clientId: string, from: string, to: string): Promise<LaunchTask[]> {
   try {
-    return (await notion.queryLaunchItems(clientId, from, to)).filter(ownedBy(clientId)).map(withoutClients);
+    const items = (await notion.queryLaunchItems(clientId, from, to)).filter(ownedBy(clientId)).map(withoutClients);
+    const withBody = await notion.pagesWithBody(items.filter((i) => i.milestone && !i.links?.length).map((i) => i.id));
+    return items.map((i) => (i.milestone ? { ...i, hasContent: Boolean(i.links?.length) || withBody.has(i.id) } : i));
   } catch {
     return []; // Details are logged in notion.ts.
   }
@@ -555,6 +557,7 @@ async function findOwnedMilestone(clientId: string, id: string) {
 export async function setMilestoneApproval(clientId: string, id: string, by: string | null): Promise<MilestoneResult> {
   const item = await findOwnedMilestone(clientId, id);
   if (!item) return { ok: false, error: "We couldn't find that milestone." };
+  if (by === null && item.posted) return { ok: false, error: "This has been marked as posted. Undo that first." };
   try {
     await notion.setApprovalInNotion(item.id, by);
     return { ok: true };
@@ -564,6 +567,19 @@ export async function setMilestoneApproval(clientId: string, id: string, by: str
 }
 
 /** The milestone's blocks for the editor, or an error if it's approved or not this client's. */
+/** Confirms (or un-confirms) a milestone as posted. Only an approved milestone can be marked posted. */
+export async function setMilestonePosted(clientId: string, id: string, posted: boolean): Promise<MilestoneResult> {
+  const item = await findOwnedMilestone(clientId, id);
+  if (!item) return { ok: false, error: "We couldn't find that milestone." };
+  if (posted && !item.approved) return { ok: false, error: "Approve this milestone before marking it as posted." };
+  try {
+    await notion.setPostedInNotion(item.id, posted);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't save that. Please try again." };
+  }
+}
+
 export async function getMilestoneEditor(clientId: string, id: string): Promise<{ blocks: EditableBlock[] } | { error: string }> {
   const item = await findOwnedMilestone(clientId, id);
   if (!item) return { error: "We couldn't find that milestone." };

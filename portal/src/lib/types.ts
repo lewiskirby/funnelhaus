@@ -85,6 +85,8 @@ export interface LaunchTask {
   icon?: ClientIcon; // the page's icon in Notion
   links?: RichText[]; // "Client links", e.g. registration or Zoom links
   approved?: { by: string; on?: string }; // milestones only: "Client Approved" ticked, with who and when
+  posted?: boolean; // milestones only: "Posted" ticked, confirmed by the client after approving
+  hasContent?: boolean; // milestones only, on the calendar: the page has a body or Client links
 }
 
 // One top-level block of a milestone page in the portal's editor. Text blocks

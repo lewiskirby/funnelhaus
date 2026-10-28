@@ -10,8 +10,10 @@ import type { BlockEdits, EditableBlock, LaunchTask } from "@/lib/types";
 import {
   approveMilestone,
   loadMilestoneEditor,
+  markMilestonePosted,
   saveMilestone,
   undoMilestoneApproval,
+  undoMilestonePosted,
 } from "./actions";
 
 const primary =
@@ -37,7 +39,10 @@ function ErrorNote({ error }: { error?: string }) {
 
 // ── Approval ────────────────────────────────────────
 
-/** Edit and Approve buttons under the milestone, or who approved it with a way to undo. */
+/**
+ * Under the milestone: Edit and Approve; once approved, who approved it and a
+ * button to confirm it's been posted; once posted, a note with a way to undo.
+ */
 export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onEdit: () => void; onChanged: () => void }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
@@ -53,7 +58,23 @@ export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onE
 
   return (
     <div className="mt-6 space-y-3">
-      {item.approved ? (
+      {item.posted ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-canvas px-4 py-3 ring-1 ring-line">
+          <p className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold text-ink">
+            <Icon.check className="size-4 shrink-0 text-success" strokeWidth={2.25} />
+            Posted
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(undoMilestonePosted)}
+            className="text-[13.5px] font-semibold text-muted underline underline-offset-2 hover:text-ink disabled:opacity-50"
+          >
+            {pending ? "Undoing…" : "Not posted yet"}
+          </button>
+        </div>
+      ) : item.approved ? (
+        <>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-success-soft px-4 py-3">
           <p className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold text-success">
             <Icon.check className="size-4 shrink-0" strokeWidth={2.25} />
@@ -68,9 +89,13 @@ export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onE
             onClick={() => run(undoMilestoneApproval)}
             className="text-[13.5px] font-semibold text-success underline underline-offset-2 hover:no-underline disabled:opacity-50"
           >
-            {pending ? "Undoing…" : "Undo approval"}
+            Undo approval
           </button>
         </div>
+        <button type="button" disabled={pending} onClick={() => run(markMilestonePosted)} className={`${approveClass} w-full`}>
+          {pending ? "Saving…" : "Mark as posted"}
+        </button>
+        </>
       ) : (
         <div className="grid grid-cols-2 gap-2.5">
           <button type="button" disabled={pending} onClick={onEdit} className={secondary}>

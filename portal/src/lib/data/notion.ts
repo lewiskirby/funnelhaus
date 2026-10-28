@@ -484,7 +484,7 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
 // Home shows unfinished task titles for the week. The launch calendar shows
 // only rows with Milestone or Event ticked (title, Due Date, Done or not, page
 // icon, Client links, and the page body when opened). Milestones also use
-// Client Approved, Approved by and Approved on. Assignee, Links and SOP are never read.
+// Client Approved, Approved by, Approved on and Posted. Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.
 
 /** Titles of this client's unfinished tracker tasks due between today and `days` from now. */
@@ -537,6 +537,7 @@ function toLaunchItem(page: Page): LaunchTask & { clientIds: string[] } {
     approved: ticked(page, "Milestone") && ticked(page, "Client Approved")
       ? { by: text(p["Approved by"]) || "Your team", on: p["Approved on"]?.date?.start ?? undefined }
       : undefined,
+    posted: ticked(page, "Milestone") && ticked(page, "Posted"),
     clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
   };
 }
@@ -588,6 +589,35 @@ export async function setApprovalInNotion(id: string, by: string | null): Promis
       },
     },
   });
+}
+
+/** Ticks or clears Posted. */
+export async function setPostedInNotion(id: string, posted: boolean): Promise<void> {
+  await notion(`/pages/${id}`, { method: "PATCH", body: { properties: { Posted: { checkbox: posted } } } });
+}
+
+// Whether a page has any body, for colouring the calendar. Kept for a minute,
+// and checked a few at a time so a busy month doesn't hit Notion's rate limit.
+const hasBodyCache = new Map<string, { at: number; value: Promise<boolean> }>();
+
+function hasBody(pageId: string): Promise<boolean> {
+  const hit = hasBodyCache.get(pageId);
+  if (hit && Date.now() - hit.at < CONTENT_TTL_MS) return hit.value;
+  const value = notion<{ results: unknown[] }>(`/blocks/${pageId}/children?page_size=1`).then((res) => res.results.length > 0);
+  hasBodyCache.set(pageId, { at: Date.now(), value });
+  value.catch(() => hasBodyCache.delete(pageId));
+  return value;
+}
+
+/** For each page id, whether it has a body. Unknown (failed) pages count as empty. */
+export async function pagesWithBody(pageIds: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  const queue = [...pageIds];
+  const worker = async () => {
+    for (let id = queue.shift(); id; id = queue.shift()) if (await hasBody(id).catch(() => false)) found.add(id);
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  return found;
 }
 
 // ── Page content ────────────────────────────────────
@@ -961,4 +991,5 @@ export async function applyBlockEdits(pageId: string, edits: BlockEdits): Promis
     });
   }
   for (const d of edits.deletes) await notion(`/blocks/${find(d.id)!.id}`, { method: "DELETE" });
+  hasBodyCache.delete(pageId);
 }

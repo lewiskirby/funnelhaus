@@ -5,6 +5,7 @@ import {
   getMilestoneEditor,
   saveMilestoneEdits,
   setMilestoneApproval,
+  setMilestonePosted,
 } from "@/lib/data";
 import { getSession, requireClient } from "@/lib/session";
 import type { BlockEdits, ContentBlock, EditableBlock, LaunchTask } from "@/lib/types";
@@ -41,6 +42,18 @@ export async function undoMilestoneApproval(id: string): Promise<Result> {
   const client = await requireClient();
   if (!validId(id)) return notFound;
   return setMilestoneApproval(client.id, id, null);
+}
+
+export async function markMilestonePosted(id: string): Promise<Result> {
+  const client = await requireClient();
+  if (!validId(id)) return notFound;
+  return setMilestonePosted(client.id, id, true);
+}
+
+export async function undoMilestonePosted(id: string): Promise<Result> {
+  const client = await requireClient();
+  if (!validId(id)) return notFound;
+  return setMilestonePosted(client.id, id, false);
 }
 
 export async function loadMilestoneEditor(id: string): Promise<{ blocks: EditableBlock[] } | { error: string }> {

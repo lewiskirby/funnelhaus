@@ -9,10 +9,10 @@ import { CalendarItems, OpenItem } from "./item-dialog";
 
 export const metadata: Metadata = { title: "Launch calendar" };
 
-/** Everything on each day: timed items in time order, then all-day ones, with done ones last. */
+/** Everything on each day: timed items in time order, then all-day ones, with posted ones last. */
 function byDay(items: LaunchTask[], days: string[]): Map<string, LaunchTask[]> {
   const map = new Map<string, LaunchTask[]>(days.map((d) => [d, []]));
-  const rank = (t: LaunchTask) => `${t.done ? 1 : 0}${t.time ?? "99"}`;
+  const rank = (t: LaunchTask) => `${t.posted ? 1 : 0}${t.time ?? "99"}`;
   for (const item of [...items].sort((a, b) => rank(a).localeCompare(rank(b)))) {
     // Something that runs over several days shows on each of them.
     for (let day = item.start; day <= (item.end ?? item.start); day = addDays(day, 1)) map.get(day)?.push(item);
@@ -116,7 +116,7 @@ function MonthLink({ month, label, icon: ArrowIcon }: { month: string; label: st
   );
 }
 
-/** The page's icon from Notion (emoji or image); otherwise a star for a milestone or a calendar for an event. */
+/** The page's icon from Notion (emoji or image); otherwise a calendar for an event and nothing for a milestone. */
 function ItemIcon({ item, className = "size-4 text-[13px]" }: { item: LaunchTask; className?: string }) {
   const icon = item.icon;
   if (icon?.type === "image") {
@@ -132,16 +132,15 @@ function ItemIcon({ item, className = "size-4 text-[13px]" }: { item: LaunchTask
     );
   }
   if (item.event && !item.milestone) return <Icon.calendar className={`shrink-0 opacity-70 ${className}`} />;
-  return (
-    <span aria-hidden="true" className={`flex shrink-0 items-center justify-center leading-none text-brand ${className}`}>
-      ★
-    </span>
-  );
+  return null;
 }
 
 function Legend() {
   const items = [
-    { label: "Milestone", swatch: "bg-brand-soft ring-1 ring-brand/40" },
+    { label: "Coming soon", swatch: "bg-canvas ring-1 ring-faint/60" },
+    { label: "In progress", swatch: "bg-brand-soft ring-1 ring-brand/40" },
+    { label: "Ready to go", swatch: "bg-brand" },
+    { label: "Posted", swatch: "bg-canvas ring-1 ring-line", strike: true },
     { label: "Event", swatch: "bg-ink-2" },
   ];
   return (
@@ -149,7 +148,7 @@ function Legend() {
       {items.map((i) => (
         <span key={i.label} className="flex items-center gap-1.5">
           <span className={`size-2.5 rounded-full ${i.swatch}`} />
-          {i.label}
+          <span className={i.strike ? "line-through decoration-faint" : ""}>{i.label}</span>
         </span>
       ))}
     </div>
@@ -180,22 +179,35 @@ function DayCell({ day, items, today, outside, lastCol }: { day: string; items: 
   );
 }
 
+// Milestones get brighter as they move along: empty (grey), has content (light
+// red), Done in Notion so ready for the client (solid red), then posted (crossed out).
 const PILL = {
-  milestone: "bg-brand-soft text-ink ring-1 ring-brand/20 font-semibold hover:ring-brand/50",
+  empty: "bg-canvas text-muted ring-1 ring-line font-medium hover:text-ink hover:ring-ink/20",
+  progress: "bg-brand-soft text-ink ring-1 ring-brand/20 font-semibold hover:ring-brand/50",
+  ready: "bg-brand text-white font-semibold shadow-sm hover:bg-brand-dark",
+  posted: "bg-canvas text-faint ring-1 ring-line hover:text-muted",
   event: "bg-ink-2 text-white font-medium hover:bg-ink",
   past: "bg-canvas text-faint ring-1 ring-line hover:text-muted",
 } as const;
 
+function pillLook(item: LaunchTask, past: boolean): keyof typeof PILL {
+  if (!item.milestone) return past ? "past" : "event";
+  if (item.posted) return "posted";
+  if (item.done) return "ready";
+  return item.hasContent ? "progress" : "empty";
+}
+
 /**
- * One milestone or event; opens its details. Past or done items are greyed out.
+ * One milestone or event; opens its details. Posted milestones and past events are greyed out.
  * `roomy` (the phone agenda) wraps long titles and shows the time underneath.
  */
 function Pill({ item, past, roomy = false }: { item: LaunchTask; past: boolean; roomy?: boolean }) {
   const size = roomy ? "px-3 py-2 text-[14px] rounded-xl" : "px-1.5 py-1 text-[11.5px] rounded-md";
   const wrap = roomy ? "break-words" : "truncate";
-  const grey = past || item.done;
-  const style = grey ? PILL.past : item.event ? PILL.event : PILL.milestone;
-  const light = item.event && !grey; // white text on the dark event colour
+  const look = pillLook(item, past);
+  const style = PILL[look];
+  const grey = look === "posted" || look === "past";
+  const light = look === "event" || look === "ready"; // white text on a dark or red pill
   const shortTime = item.time?.slice(0, 5);
   return (
     <li>
@@ -204,14 +216,14 @@ function Pill({ item, past, roomy = false }: { item: LaunchTask; past: boolean; 
         title={item.title}
         className={`flex w-full cursor-pointer items-center gap-1.5 text-left leading-snug transition ${size} ${style}`}
       >
-        {item.done ? (
+        {look === "posted" ? (
           <Icon.check className="size-3.5 shrink-0 text-success" strokeWidth={2.2} />
         ) : (
           <ItemIcon item={item} className={`${roomy ? "size-5 text-[17px]" : "size-3.5 text-[12px]"} ${grey ? "opacity-50 grayscale" : ""}`} />
         )}
         <span className={`min-w-0 flex-1 ${wrap}`} title={[item.title, item.time].filter(Boolean).join(" · ")}>
           {!roomy && shortTime && <span className={`mr-1 font-normal ${light ? "text-white/60" : grey ? "" : "text-muted"}`}>{shortTime}</span>}
-          <span className={item.done ? "line-through decoration-faint/60" : ""}>{item.title}</span>
+          <span className={look === "posted" ? "line-through decoration-faint/60" : ""}>{item.title}</span>
           {roomy && (item.time || item.end) && (
             <span className={`block text-[12.5px] font-normal ${light ? "text-white/60" : grey ? "" : "text-muted"}`}>
               {[item.time, item.end && `until ${formatDay(item.end, { day: "numeric", month: "short" })}`].filter(Boolean).join(" · ")}

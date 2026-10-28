@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { CopyLink, readLinks } from "@/components/event-row";
 import { NotionContent } from "@/components/notion-content";
@@ -23,6 +24,7 @@ export function CalendarItems({ children }: { children: ReactNode }) {
   const session = useRef(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const pressedBackdrop = useRef(false);
+  const router = useRouter();
   const close = () => setOpened(null);
 
   function open(id: string, title: string) {
@@ -31,9 +33,10 @@ export function CalendarItems({ children }: { children: ReactNode }) {
     load(id, current);
   }
 
-  /** Fetches the item again after an approval or edit, keeping the pop-up open. */
+  /** Fetches the item again after an approval or edit, keeping the pop-up open, and recolours the calendar behind it. */
   function reload() {
     if (opened) load(opened.id, opened.session);
+    router.refresh();
   }
 
   function load(id: string, current: number) {
@@ -106,7 +109,11 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
             <p className="mb-1.5 flex flex-wrap gap-1.5">
               {item.milestone && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11.5px] font-semibold text-brand">Milestone</span>}
               {item.event && <span className="rounded-full bg-ink-2 px-2 py-0.5 text-[11.5px] font-semibold text-white">Event</span>}
-              {item.done && <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11.5px] font-semibold text-success">Done</span>}
+              {item.posted ? (
+                <span className="rounded-full bg-canvas px-2 py-0.5 text-[11.5px] font-semibold text-muted ring-1 ring-line">Posted</span>
+              ) : (
+                item.done && <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11.5px] font-semibold text-success">Ready to go</span>
+              )}
             </p>
           )}
           <h2 id="calendar-item-title" className="text-[22px] leading-snug font-bold tracking-[-0.02em] break-words text-ink">
