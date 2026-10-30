@@ -68,8 +68,8 @@ type Contact = {
   searchAfter?: unknown[];
 };
 
-type FieldKey = "utm_source" | "utm_campaign" | "utm_content" | "trakyo_source" | "trakyo_content" | "trakyo_last_touch";
-const FIELD_KEYS: FieldKey[] = ["utm_source", "utm_campaign", "utm_content", "trakyo_source", "trakyo_content", "trakyo_last_touch"];
+type FieldKey = "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "trakyo_source" | "trakyo_content" | "trakyo_last_touch";
+const FIELD_KEYS: FieldKey[] = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "trakyo_source", "trakyo_content", "trakyo_last_touch"];
 
 /** The ids of the UTM and Trakyo custom fields, by their field key (contact.utm_source and so on). */
 async function fieldIds(account: Account): Promise<Partial<Record<FieldKey, string>>> {
@@ -115,6 +115,13 @@ const SOURCE_NAMES: Record<string, string> = {
   referrer: "Referrer",
 };
 const sourceName = (s?: string) => (s ? (SOURCE_NAMES[s.toLowerCase()] ?? s) : undefined);
+const PLATFORMS = new Set(Object.values(SOURCE_NAMES).map((n) => n.toLowerCase()));
+const PAID = /^(paid|cpc|ppc|ads?|paid_?social)$/i;
+const mostCommon = (values: string[]) => {
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+};
 
 // Trakyo touches read "Instagram · IG BIO → Register · 30 Oct 2026, 21:26 UTC"; the time is dropped.
 const touch = (s?: string) => s?.replace(/\s*·\s*\d{1,2} \w+ \d{4}, \d{1,2}:\d{2} UTC$/, "");
@@ -149,7 +156,7 @@ async function fetchRegistrants(account: Account): Promise<Registrant[]> {
   }
 
   // Trakyo (first touch) comes first, as UTMs were retired; UTMs, then GHL's own attribution, fill in for older contacts.
-  return contacts.map((c) => {
+  const rows = contacts.map((c) => {
     const field = (key: FieldKey) => {
       const id = ids[key];
       return id ? text(c.customFields?.find((f) => f.id === id)?.value) : undefined;
@@ -158,20 +165,54 @@ async function fetchRegistrants(account: Account): Promise<Registrant[]> {
     const last = c.lastAttributionSource ?? {};
     const utm = {
       source: field("utm_source") ?? text(first.utmSource) ?? text(last.utmSource),
+      medium: field("utm_medium") ?? text(first.utmMedium) ?? text(last.utmMedium),
       campaign: field("utm_campaign") ?? text(first.utmCampaign ?? first.campaign) ?? text(last.utmCampaign ?? last.campaign),
       content: field("utm_content") ?? text(first.utmContent) ?? text(last.utmContent),
     };
     const trakyo = { source: field("trakyo_source"), content: field("trakyo_content"), last: touch(field("trakyo_last_touch")) };
     const webinars = new Map<string, Webinar>();
     for (const w of (c.tags ?? []).map(webinarOf)) if (w) webinars.set(w.key, w);
+    return { c, utm, trakyo, webinars: [...webinars.values()] };
+  });
+
+  // Trakyo files ad clicks under the ad campaign ("[Webinar] Purchase Campaign") with the ad's name as content.
+  // A Trakyo source is an ad campaign when it isn't a platform and most of its people have a paid UTM.
+  const paidShare = new Map<string, { paid: number; tagged: number }>();
+  for (const { utm, trakyo } of rows) {
+    if (!trakyo.source || !utm.medium) continue;
+    const s = paidShare.get(trakyo.source) ?? { paid: 0, tagged: 0 };
+    s.tagged++;
+    if (PAID.test(utm.medium)) s.paid++;
+    paidShare.set(trakyo.source, s);
+  }
+  const isAdCampaign = (source?: string) => {
+    const s = source ? paidShare.get(source) : undefined;
+    return !!s && !PLATFORMS.has(source!.toLowerCase()) && s.paid * 2 > s.tagged;
+  };
+  // Paid UTMs only carry the Meta ad id; name it after what Trakyo called that ad for other people.
+  const namesById = new Map<string, string[]>();
+  for (const { utm, trakyo } of rows) {
+    if (!utm.content || !trakyo.content || !isAdCampaign(trakyo.source)) continue;
+    namesById.set(utm.content, [...(namesById.get(utm.content) ?? []), trakyo.content]);
+  }
+  const adOf = ({ utm, trakyo }: (typeof rows)[number]) => {
+    if (isAdCampaign(trakyo.source)) return trakyo.content ?? "Unnamed ad";
+    if (!utm.medium || !PAID.test(utm.medium)) return undefined;
+    const name = utm.content ? mostCommon(namesById.get(utm.content) ?? []) : undefined;
+    return name ?? (utm.content ? `Ad ${utm.content}` : "Unnamed ad");
+  };
+
+  return rows.map((row) => {
+    const { c, utm, trakyo, webinars } = row;
     return {
       addedAt: c.dateAdded,
-      webinars: [...webinars.values()],
+      webinars,
       source: sourceName(trakyo.source ?? utm.source),
+      ad: adOf(row),
       content: trakyo.content ?? (trakyo.source ? undefined : (utm.content ?? utm.campaign)),
       lastTouch: trakyo.last,
       tracking: trakyo.source ? "Trakyo" : utm.source ? "UTM" : "Not tracked",
-    };
+    } satisfies Registrant;
   });
 }
 

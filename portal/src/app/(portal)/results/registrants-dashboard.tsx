@@ -9,9 +9,10 @@ const DEFAULT_TZ = "Europe/Berlin";
 const noopSubscribe = () => () => {};
 
 // Trakyo and UTMs blended (see ghl.ts): Trakyo where it tracked someone, UTMs where it didn't.
-type Dimension = "source" | "content" | "lastTouch" | "tracking";
+type Dimension = "source" | "ad" | "content" | "lastTouch" | "tracking";
 const DIMENSIONS: { key: Dimension; label: string }[] = [
   { key: "source", label: "Source" },
+  { key: "ad", label: "Ad" },
   { key: "content", label: "Content" },
   { key: "lastTouch", label: "Last touch" },
   { key: "tracking", label: "Tracked by" },
@@ -25,6 +26,8 @@ const RANGES = [
 type Range = (typeof RANGES)[number]["key"];
 
 const NOT_SET = "(not set)";
+const NOT_AN_AD = "Not from an ad";
+const isEmpty = (label: string) => label === NOT_SET || label === NOT_AN_AD;
 // Categorical slots in fixed order (validated for colour-blind separation on white).
 // A value keeps its colour however the filters change; past eight, values fold into "Other".
 const SLOTS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
@@ -40,10 +43,10 @@ const subscribeMinute = (tick: () => void) => {
 const currentMinute = () => Math.floor(Date.now() / MINUTE);
 
 const dayIn = (iso: string, zone: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: zone });
-const valueOf = (r: Registrant, d: Dimension) => r[d] ?? NOT_SET;
+const valueOf = (r: Registrant, d: Dimension) => r[d] ?? (d === "ad" ? NOT_AN_AD : NOT_SET);
 
 type Filters = Record<Dimension, string>;
-const NO_FILTERS: Filters = { source: "", content: "", lastTouch: "", tracking: "" };
+const NO_FILTERS: Filters = { source: "", ad: "", content: "", lastTouch: "", tracking: "" };
 
 export function RegistrantsDashboard({
   registrants,
@@ -109,11 +112,11 @@ export function RegistrantsDashboard({
   const slices = useMemo(() => {
     const counts = new Map<string, number>();
     for (const r of shown) counts.set(valueOf(r, dimension), (counts.get(valueOf(r, dimension)) ?? 0) + 1);
-    const sorted = [...counts].map(([label, count]) => ({ label, count, colour: label === NOT_SET ? MUTED : colours(label) }));
-    sorted.sort((a, b) => Number(a.label === NOT_SET) - Number(b.label === NOT_SET) || b.count - a.count || a.label.localeCompare(b.label));
+    const sorted = [...counts].map(([label, count]) => ({ label, count, colour: isEmpty(label) ? MUTED : colours(label) }));
+    sorted.sort((a, b) => Number(isEmpty(a.label)) - Number(isEmpty(b.label)) || b.count - a.count || a.label.localeCompare(b.label));
     // Values without their own colour are folded into "Other" so no two slices share a colour.
-    const own = sorted.filter((s) => s.colour !== MUTED || s.label === NOT_SET);
-    const rest = sorted.filter((s) => s.colour === MUTED && s.label !== NOT_SET);
+    const own = sorted.filter((s) => s.colour !== MUTED || isEmpty(s.label));
+    const rest = sorted.filter((s) => s.colour === MUTED && !isEmpty(s.label));
     if (rest.length) own.push({ label: OTHER, count: rest.reduce((n, s) => n + s.count, 0), colour: "#6f6f6b" });
     return own;
   }, [shown, dimension, colours]);
@@ -136,7 +139,7 @@ export function RegistrantsDashboard({
     <div className="space-y-6">
       {/* Filters */}
       <section className="card p-4 sm:p-5">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <Select label="Webinar" value={webinar} onChange={setWebinar}>
             <option value="all">All webinars</option>
             {webinars.map((w) => (
@@ -195,7 +198,7 @@ export function RegistrantsDashboard({
       <section className="card p-5 sm:p-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">Where registrants came from</h2>
-          <div role="tablist" aria-label="Break down by" className="grid w-full grid-cols-4 gap-1 rounded-full bg-canvas p-1 ring-1 ring-line sm:flex sm:w-auto">
+          <div role="tablist" aria-label="Break down by" className="flex w-full flex-wrap gap-1 rounded-[20px] bg-canvas p-1 ring-1 ring-line sm:w-auto sm:rounded-full">
             {DIMENSIONS.map(({ key, label }) => (
               <button
                 key={key}
@@ -224,7 +227,7 @@ export function RegistrantsDashboard({
           </div>
         )}
         <p className="mt-5 text-[12.5px] text-muted">
-          Tap a slice or row to filter by it. Sources come from Trakyo, or from UTMs where Trakyo has nothing. Registrants with neither show as {NOT_SET}.
+          Tap a slice or row to filter by it. Sources come from Trakyo, or from UTMs where Trakyo has nothing. Registrants with neither show as {NOT_SET}. Ads are named as in Trakyo.
         </p>
       </section>
 
@@ -363,7 +366,7 @@ function BreakdownTable({ slices, total, selected, onSelect }: { slices: Slice[]
               <td className="py-2.5 pr-3">
                 <span className="flex min-w-0 items-center gap-2.5">
                   <span className="size-3 shrink-0 rounded-full" style={{ background: s.colour }} />
-                  <span className={`min-w-0 break-all ${s.label === NOT_SET || s.label === OTHER ? "text-muted" : "font-medium text-ink"}`}>{s.label}</span>
+                  <span className={`min-w-0 break-all ${isEmpty(s.label) || s.label === OTHER ? "text-muted" : "font-medium text-ink"}`}>{s.label}</span>
                 </span>
               </td>
               <td className="py-2.5 text-right font-semibold text-ink tabular-nums">{s.count.toLocaleString("en-GB")}</td>

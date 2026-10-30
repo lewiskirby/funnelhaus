@@ -107,6 +107,7 @@ export interface Registrant {
   addedAt: string; // ISO date-time they were added to GHL
   webinars: { key: string; label: string }[]; // from tags like "14oct2026-registered" or "14-october-2026-webinar"
   source?: string; // Trakyo source, or utm_source when Trakyo has none
+  ad?: string; // the ad's name for people who came from an ad (Trakyo, or the Meta ad id in utm_content)
   content?: string; // Trakyo content (post, ad or video), or utm_content / utm_campaign
   lastTouch?: string; // Trakyo last touch, "Instagram · IG BIO → Register"
   tracking: "Trakyo" | "UTM" | "Not tracked";
