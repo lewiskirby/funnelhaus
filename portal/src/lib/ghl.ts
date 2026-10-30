@@ -1,5 +1,5 @@
 // Reads webinar registrants from a client's GoHighLevel sub-account. Server-only:
-// tokens never reach the browser, and only dates, webinar names and UTMs leave
+// tokens never reach the browser, and only dates, webinar names and sources leave
 // the server (never names, emails or phone numbers).
 //
 // GHL_CLIENTS (env) maps a Notion client id to its GHL sub-account:
@@ -68,32 +68,56 @@ type Contact = {
   searchAfter?: unknown[];
 };
 
-type UtmKey = "source" | "medium" | "campaign" | "content";
+type FieldKey = "utm_source" | "utm_campaign" | "utm_content" | "trakyo_source" | "trakyo_content" | "trakyo_last_touch";
+const FIELD_KEYS: FieldKey[] = ["utm_source", "utm_campaign", "utm_content", "trakyo_source", "trakyo_content", "trakyo_last_touch"];
 
-/** The ids of the UTM custom fields, by their field key (contact.utm_source and so on). */
-async function utmFieldIds(account: Account): Promise<Record<UtmKey, string | undefined>> {
+/** The ids of the UTM and Trakyo custom fields, by their field key (contact.utm_source and so on). */
+async function fieldIds(account: Account): Promise<Partial<Record<FieldKey, string>>> {
   const { customFields } = await ghl<{ customFields: { id: string; fieldKey?: string }[] }>(
     account,
     `/locations/${account.locationId}/customFields`,
   );
-  const find = (key: string) => customFields.find((f) => f.fieldKey === `contact.utm_${key}`)?.id;
-  return { source: find("source"), medium: find("medium"), campaign: find("campaign"), content: find("content") };
+  return Object.fromEntries(FIELD_KEYS.map((k) => [k, customFields.find((f) => f.fieldKey === `contact.${k}`)?.id]));
 }
 
-// Per-webinar tags look like "14-october-2026-webinar".
-const WEBINAR_TAG = /^(\d{1,2})-([a-z]+)-(\d{4})-webinar$/;
+// Per-webinar tags look like "14-october-2026-webinar" or "1nov2026-registered" (not "14oct2026-attended").
+const WEBINAR_TAGS = [/^(\d{1,2})-([a-z]+)-(\d{4})-webinar$/, /^(\d{1,2})([a-z]+)(\d{4})-registered$/];
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const capital = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
-/** "14-october-2026-webinar" → { key: "2026-10-14", label: "14 October 2026" }. */
+/** "14-october-2026-webinar" or "14oct2026-registered" → { key: "2026-10-14", label: "14 October 2026" }. */
 function webinarOf(tag: string): { key: string; label: string } | null {
-  const m = WEBINAR_TAG.exec(tag.trim().toLowerCase());
+  const name = tag.trim().toLowerCase();
+  const m = WEBINAR_TAGS.map((re) => re.exec(name)).find(Boolean);
   if (!m) return null;
-  const date = new Date(`${m[1]} ${m[2]} ${m[3]} 12:00 UTC`);
-  if (Number.isNaN(date.getTime())) return null;
-  return { key: date.toISOString().slice(0, 10), label: `${Number(m[1])} ${capital(m[2])} ${m[3]}` };
+  const month = MONTHS.findIndex((mo) => m[2].length >= 3 && mo.startsWith(m[2]));
+  const day = Number(m[1]);
+  const date = new Date(Date.UTC(Number(m[3]), month, day, 12));
+  if (month < 0 || date.getUTCDate() !== day) return null;
+  return { key: date.toISOString().slice(0, 10), label: `${day} ${capital(MONTHS[month])} ${m[3]}` };
 }
 
 const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+// UTM sources are short codes ("ig"); Trakyo names the platform ("Instagram"). Both end up as the latter.
+const SOURCE_NAMES: Record<string, string> = {
+  ig: "Instagram",
+  instagram: "Instagram",
+  fb: "Facebook",
+  facebook: "Facebook",
+  yt: "YouTube",
+  youtube: "YouTube",
+  skool: "Skool",
+  email: "Email",
+  whatsapp: "WhatsApp",
+  discord: "Discord",
+  tiktok: "TikTok",
+  referrer: "Referrer",
+};
+const sourceName = (s?: string) => (s ? (SOURCE_NAMES[s.toLowerCase()] ?? s) : undefined);
+
+// Trakyo touches read "Instagram · IG BIO → Register · 30 Oct 2026, 21:26 UTC"; the time is dropped.
+const touch = (s?: string) => s?.replace(/\s*·\s*\d{1,2} \w+ \d{4}, \d{1,2}:\d{2} UTC$/, "");
 
 export type Webinar = { key: string; label: string };
 
@@ -104,7 +128,7 @@ async function fetchWebinarTags(account: Account): Promise<Webinar[]> {
 }
 
 async function fetchRegistrants(account: Account): Promise<Registrant[]> {
-  const ids = await utmFieldIds(account);
+  const ids = await fieldIds(account);
   const contacts: Contact[] = [];
   let searchAfter: unknown[] | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
@@ -124,19 +148,29 @@ async function fetchRegistrants(account: Account): Promise<Registrant[]> {
     if (batch.length < PAGE || !searchAfter) break;
   }
 
+  // Trakyo (first touch) comes first, as UTMs were retired; UTMs, then GHL's own attribution, fill in for older contacts.
   return contacts.map((c) => {
-    const field = (id?: string) => (id ? text(c.customFields?.find((f) => f.id === id)?.value) : undefined);
-    // GHL's own first-touch attribution fills in when the UTM fields are empty.
+    const field = (key: FieldKey) => {
+      const id = ids[key];
+      return id ? text(c.customFields?.find((f) => f.id === id)?.value) : undefined;
+    };
     const first = c.attributionSource ?? {};
     const last = c.lastAttributionSource ?? {};
-    const webinars = (c.tags ?? []).map(webinarOf).filter((w): w is { key: string; label: string } => w !== null);
+    const utm = {
+      source: field("utm_source") ?? text(first.utmSource) ?? text(last.utmSource),
+      campaign: field("utm_campaign") ?? text(first.utmCampaign ?? first.campaign) ?? text(last.utmCampaign ?? last.campaign),
+      content: field("utm_content") ?? text(first.utmContent) ?? text(last.utmContent),
+    };
+    const trakyo = { source: field("trakyo_source"), content: field("trakyo_content"), last: touch(field("trakyo_last_touch")) };
+    const webinars = new Map<string, Webinar>();
+    for (const w of (c.tags ?? []).map(webinarOf)) if (w) webinars.set(w.key, w);
     return {
       addedAt: c.dateAdded,
-      webinars,
-      source: field(ids.source) ?? text(first.utmSource) ?? text(last.utmSource),
-      medium: field(ids.medium) ?? text(first.utmMedium) ?? text(last.utmMedium),
-      campaign: field(ids.campaign) ?? text(first.utmCampaign ?? first.campaign) ?? text(last.utmCampaign ?? last.campaign),
-      content: field(ids.content) ?? text(first.utmContent) ?? text(last.utmContent),
+      webinars: [...webinars.values()],
+      source: sourceName(trakyo.source ?? utm.source),
+      content: trakyo.content ?? (trakyo.source ? undefined : (utm.content ?? utm.campaign)),
+      lastTouch: trakyo.last,
+      tracking: trakyo.source ? "Trakyo" : utm.source ? "UTM" : "Not tracked",
     };
   });
 }

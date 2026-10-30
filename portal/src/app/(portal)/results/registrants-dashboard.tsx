@@ -8,12 +8,13 @@ import type { Registrant } from "@/lib/types";
 const DEFAULT_TZ = "Europe/Berlin";
 const noopSubscribe = () => () => {};
 
-type Dimension = "source" | "medium" | "campaign" | "content";
+// Trakyo and UTMs blended (see ghl.ts): Trakyo where it tracked someone, UTMs where it didn't.
+type Dimension = "source" | "content" | "lastTouch" | "tracking";
 const DIMENSIONS: { key: Dimension; label: string }[] = [
-  { key: "source", label: "UTM source" },
-  { key: "medium", label: "UTM medium" },
-  { key: "campaign", label: "UTM campaign" },
-  { key: "content", label: "UTM content" },
+  { key: "source", label: "Source" },
+  { key: "content", label: "Content" },
+  { key: "lastTouch", label: "Last touch" },
+  { key: "tracking", label: "Tracked by" },
 ];
 const RANGES = [
   { key: "all", label: "All time" },
@@ -42,7 +43,7 @@ const dayIn = (iso: string, zone: string) => new Date(iso).toLocaleDateString("e
 const valueOf = (r: Registrant, d: Dimension) => r[d] ?? NOT_SET;
 
 type Filters = Record<Dimension, string>;
-const NO_FILTERS: Filters = { source: "", medium: "", campaign: "", content: "" };
+const NO_FILTERS: Filters = { source: "", content: "", lastTouch: "", tracking: "" };
 
 export function RegistrantsDashboard({
   registrants,
@@ -77,7 +78,7 @@ export function RegistrantsDashboard({
   const today = dayIn(new Date(now).toISOString(), zone);
   const daysAgo = (n: number) => dayIn(new Date(now - n * 86_400_000).toISOString(), zone);
 
-  // Everyone matching the webinar and UTM filters, before the date range.
+  // Everyone matching the webinar and source filters, before the date range.
   const matching = registrants.filter(
     (r) =>
       (webinar === "all" || r.webinars.some((w) => w.key === webinar)) &&
@@ -92,7 +93,7 @@ export function RegistrantsDashboard({
   const newToday = matching.filter((r) => dayIn(r.addedAt, zone) === today).length;
   const last7 = matching.filter((r) => dayIn(r.addedAt, zone) > daysAgo(7)).length;
 
-  // Options for each UTM filter come from the chosen webinar, so they never lead to nothing.
+  // Options for each source filter come from the chosen webinar, so they never lead to nothing.
   const forWebinar = registrants.filter((r) => webinar === "all" || r.webinars.some((w) => w.key === webinar));
   const optionsFor = (d: Dimension) => [...new Set(forWebinar.map((r) => valueOf(r, d)))].sort((a, b) => a.localeCompare(b));
 
@@ -193,7 +194,7 @@ export function RegistrantsDashboard({
       {/* Breakdown */}
       <section className="card p-5 sm:p-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">Registrants by UTM</h2>
+          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">Where registrants came from</h2>
           <div role="tablist" aria-label="Break down by" className="grid w-full grid-cols-4 gap-1 rounded-full bg-canvas p-1 ring-1 ring-line sm:flex sm:w-auto">
             {DIMENSIONS.map(({ key, label }) => (
               <button
@@ -206,7 +207,7 @@ export function RegistrantsDashboard({
                   dimension === key ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-line" : "text-muted hover:text-ink"
                 }`}
               >
-                {label.replace("UTM ", "")}
+                {label}
               </button>
             ))}
           </div>
@@ -223,7 +224,7 @@ export function RegistrantsDashboard({
           </div>
         )}
         <p className="mt-5 text-[12.5px] text-muted">
-          Tap a slice or row to filter by it. Registrants without a UTM show as {NOT_SET}.
+          Tap a slice or row to filter by it. Sources come from Trakyo, or from UTMs where Trakyo has nothing. Registrants with neither show as {NOT_SET}.
         </p>
       </section>
 
@@ -287,7 +288,7 @@ function Donut({ slices, total, selected, onSelect }: { slices: Slice[]; total: 
 
   return (
     <div className="relative mx-auto w-full max-w-[260px]">
-      <svg viewBox="0 0 220 220" className="w-full" role="img" aria-label={`Registrants by UTM: ${slices.map((s) => `${s.label} ${s.count}`).join(", ")}`}>
+      <svg viewBox="0 0 220 220" className="w-full" role="img" aria-label={`Where registrants came from: ${slices.map((s) => `${s.label} ${s.count}`).join(", ")}`}>
         {arcs.length === 1 ? (
           <circle
             cx="110"
