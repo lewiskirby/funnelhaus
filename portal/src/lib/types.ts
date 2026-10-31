@@ -114,6 +114,14 @@ export interface Registrant {
   vip?: boolean; // bought the VIP upgrade (GHL field "VIP Ticket Purchased" = Yes); undefined if the client has no such field
 }
 
+// One ad's Meta spend on one ad-account day, in USD (see meta.ts).
+export interface SpendRow {
+  day: string; // YYYY-MM-DD
+  campaign: string; // Meta campaign name, as Trakyo shows it for ad clicks
+  ad: string; // Meta ad name, matching the registrants' Ad value
+  usd: number;
+}
+
 // Page content from Notion, reduced to what the portal renders.
 export interface RichText {
   text: string;

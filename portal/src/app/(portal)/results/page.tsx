@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { formatDay } from "@/lib/calendar";
 import { getClientEvents } from "@/lib/data";
 import { getWebinarRegistrants, ghlContactsUrl, type Webinar } from "@/lib/ghl";
-import { getDailySpend } from "@/lib/meta";
+import { getAdSpend } from "@/lib/meta";
 import { requireClient } from "@/lib/session";
 import { RegistrantsDashboard } from "./registrants-dashboard";
 
@@ -29,7 +29,7 @@ export default async function ResultsPage() {
   const [data, events, spend] = await Promise.all([
     getWebinarRegistrants(client.id).catch(() => null),
     getClientEvents(client.id),
-    getDailySpend(client.id).catch(() => "error" as const),
+    getAdSpend(client.id).catch(() => "error" as const),
   ]);
 
   // Upcoming webinars from the tracker show in the filter before anyone registers,

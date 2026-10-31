@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Icon } from "@/components/ui";
-import type { Registrant } from "@/lib/types";
+import type { Registrant, SpendRow } from "@/lib/types";
 
 // Rendered in Berlin time on the server, then in the viewer's own time zone.
 const DEFAULT_TZ = "Europe/Berlin";
@@ -48,6 +48,7 @@ const valueOf = (r: Registrant, d: Dimension) => r[d] ?? (d === "ad" ? NOT_AN_AD
 type Filters = Record<Dimension, string>;
 const NO_FILTERS: Filters = { source: "", ad: "", content: "", lastTouch: "", tracking: "" };
 
+const nameKey = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n >= 1000 ? 0 : 2 });
 
 export function RegistrantsDashboard({
@@ -60,7 +61,7 @@ export function RegistrantsDashboard({
 }: {
   registrants: Registrant[];
   tracksVip: boolean; // the client has a "VIP Ticket Purchased" field in GHL
-  spend: Record<string, number> | "error" | null; // Meta spend in USD by ad-account day; null if no ad account is connected
+  spend: SpendRow[] | "error" | null; // Meta spend in USD per ad and day; null if no ad account is connected
   webinars: { key: string; label: string }[]; // tagged in GHL or on the calendar, including upcoming ones
   ghlUrl: string;
   fetchedAt: number;
@@ -99,7 +100,16 @@ export function RegistrantsDashboard({
     return range === "today" ? day === today : day > daysAgo(Number(range));
   };
   const shown = matching.filter(inRange);
-  const vipPurchases = matching.filter((r) => r.vip && inRange(r)).length;
+  // Costs only count people who came from an ad, since that's who the spend paid for.
+  let vipPurchases = 0;
+  let fromAds = 0;
+  let vipsFromAds = 0;
+  for (const r of matching) {
+    if (!inRange(r)) continue;
+    if (r.vip) vipPurchases++;
+    if (r.ad) fromAds++;
+    if (r.ad && r.vip) vipsFromAds++;
+  }
   const newToday = matching.filter((r) => dayIn(r.addedAt, zone) === today).length;
   const last7 = matching.filter((r) => dayIn(r.addedAt, zone) > daysAgo(7)).length;
 
@@ -129,18 +139,40 @@ export function RegistrantsDashboard({
   }, [shown, dimension, colours]);
 
 
-  // Spend over the same days. A webinar's spend is every day after the webinar before it, up to its own day.
-  // Spend can't be split by source or ad, so it's left out while one of those filters is on.
+  // Spend over the same days and filters as the registrants. A webinar's spend is every day after the
+  // webinar before it, up to its own day. An Ad (or Content) filter narrows spend to that ad, and a Source
+  // filter to that campaign; filters with no spend behind them (Instagram, Last touch...) leave it blank.
   const after = webinars.reduce((prev, w) => (w.key < webinar && w.key > prev ? w.key : prev), "");
   const spendDay = (day: string) =>
     (webinar === "all" || (day > after && day <= webinar)) &&
     (range === "all" || (range === "today" ? day === today : day > daysAgo(Number(range))));
+  const rows = spend && spend !== "error" ? spend : [];
+  const ads = new Set(rows.map((r) => nameKey(r.ad)));
+  const campaigns = new Set(rows.map((r) => nameKey(r.campaign)));
+  const spendFilters: ((r: SpendRow) => boolean)[] = [];
+  let unattributable = false;
+  for (const { key } of DIMENSIONS) {
+    const value = filters[key] ? nameKey(filters[key]) : "";
+    if (!value) continue;
+    if ((key === "ad" || key === "content") && ads.has(value)) spendFilters.push((r) => nameKey(r.ad) === value);
+    else if ((key === "source" || key === "content") && campaigns.has(value)) spendFilters.push((r) => nameKey(r.campaign) === value);
+    else unattributable = true;
+  }
   const spent =
-    spend && spend !== "error" && !DIMENSIONS.some(({ key }) => filters[key])
-      ? Object.entries(spend).reduce((sum, [day, amount]) => (spendDay(day) ? sum + amount : sum), 0)
+    spend && spend !== "error" && !unattributable
+      ? rows.reduce((sum, r) => (spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.usd : sum), 0)
       : null;
+  const adFilter = filters.ad || (filters.content && ads.has(nameKey(filters.content)) ? filters.content : "");
   const spendHint =
-    spend === "error" ? "Couldn't load from Meta" : spent === null ? "Clear source filters to see" : webinar === "all" ? "Meta ads, in USD" : "Meta ads since the last webinar";
+    spend === "error"
+      ? "Couldn't load from Meta"
+      : spent === null
+        ? "No ad spend behind this filter"
+        : adFilter
+          ? `Spent on ${adFilter}`
+          : webinar === "all"
+            ? "Meta ads, in USD"
+            : "Meta ads since the last webinar";
   const costPer = (count: number) => (spent === null ? "—" : count ? usd(spent / count) : "—");
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
@@ -214,9 +246,11 @@ export function RegistrantsDashboard({
           <section className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${spend && tracksVip ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}>
             <Stat label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} accent />
             {spend && <Stat label="Ad spend" value={spent === null ? "—" : usd(spent)} hint={spendHint} />}
-            {spend && <Stat label="Cost per registrant" value={costPer(shown.length)} hint="Ad spend ÷ registrants" />}
+            {spend && <Stat label="Cost per registrant" value={costPer(fromAds)} hint={`Ad spend ÷ ${fromAds.toLocaleString("en-GB")} from ads`} />}
             {tracksVip && <Stat label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
-            {spend && tracksVip && <Stat label="Cost per VIP purchase" value={costPer(vipPurchases)} hint="Ad spend ÷ VIP purchases" />}
+            {spend && tracksVip && (
+              <Stat label="Cost per VIP purchase" value={costPer(vipsFromAds)} hint={`Ad spend ÷ ${vipsFromAds.toLocaleString("en-GB")} from ads`} />
+            )}
           </section>
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />
