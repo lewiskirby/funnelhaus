@@ -128,7 +128,11 @@ export function RegistrantsDashboard({
 
   // Options for each source filter come from the chosen webinar, so they never lead to nothing.
   const forWebinar = registrants.filter((r) => webinar === "all" || r.webinars.some((w) => w.key === webinar));
-  const optionsFor = (d: Dimension) => [...new Set(forWebinar.map((r) => valueOf(r, d)))].sort((a, b) => a.localeCompare(b));
+  // The Ad filter also offers ads that spent without bringing anyone in yet.
+  const optionsFor = (d: Dimension) =>
+    [...new Set([...forWebinar.map((r) => valueOf(r, d)), ...(d === "ad" && spend && spend !== "error" ? spend.map((r) => r.ad) : [])])].sort((a, b) =>
+      a.localeCompare(b),
+    );
 
   // Colours follow the value (ranked over everyone), not its position in the current view.
   const colours = useMemo(() => {
@@ -204,8 +208,18 @@ export function RegistrantsDashboard({
     return rows.reduce((sum, r) => (match(r) && spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.usd : sum), 0);
   };
   const showSpend = !!spend && (dimension === "ad" || dimension === "source" || dimension === "content");
+  // Ads that spent in this view but brought no registrants still get a row, after the rest.
+  const listed = new Set(slices.map((sl) => nameKey(sl.label)));
+  const spendOnly: Slice[] =
+    dimension === "ad" || dimension === "content"
+      ? [...new Map(rows.map((r) => [nameKey(r.ad), r.ad])).values()]
+          .filter((ad) => !listed.has(nameKey(ad)) && (spendFor(ad) ?? 0) > 0)
+          .sort((a, b) => (spendFor(b) ?? 0) - (spendFor(a) ?? 0))
+          .map((ad) => ({ label: ad, count: 0, colour: MUTED }))
+      : [];
+  const tableSlices = [...slices, ...spendOnly];
   const money = Object.fromEntries(
-    slices.map((sl) => [sl.label, { spend: sl.label === OTHER ? null : spendFor(sl.label), ...(byValue.get(sl.label) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 }) }]),
+    tableSlices.map((sl) => [sl.label, { spend: sl.label === OTHER ? null : spendFor(sl.label), ...(byValue.get(sl.label) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 }) }]),
   );
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
@@ -328,7 +342,7 @@ export function RegistrantsDashboard({
           <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[280px_1fr]">
             <Donut slices={slices} total={shown.length} selected={filters[dimension]} onSelect={toggleSlice} />
             <BreakdownTable
-              slices={slices}
+              slices={tableSlices}
               total={shown.length}
               selected={filters[dimension]}
               onSelect={toggleSlice}
