@@ -25,7 +25,8 @@ The Notion integration must have access to the FunnelHaus HQ page.
 | `MAKE_PORTAL_EMAIL_WEBHOOK_URL` | Webhook of the Make scenario "FunnelHaus Portal Emails", which sends sign-in codes and teammate welcomes |
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Upstash for Redis, added in Vercel under Storage. Holds sign-in codes and rate limits. Optional locally (falls back to memory), required in production |
 | `GHL_CLIENTS` | Optional. Connects a client's GoHighLevel to their Results page, as JSON keyed by the client's Notion page id: `{"<notion id>": {"locationId": "...", "token": "pit-..."}}` (add `"appUrl"` for a white-label GHL domain). The token is a Private Integration with `contacts.readonly`, `locations/customFields.readonly` and `locations/tags.readonly`. Clients not listed see "coming soon" |
-| `META_CLIENTS` | Optional. Adds ad spend and costs to a client's Results page, as JSON keyed by the client's Notion page id: `{"<notion id>": {"adAccountId": "...", "token": "EAA...", "campaignFilter": "Webinar"}}`. The token is a Meta system user token with `ads_read` on that ad account; `campaignFilter` is optional |
+| `META_CLIENTS` | Optional. Adds ad spend and costs to a client's Results page, as JSON keyed by the client's Notion page id: `{"<notion id>": {"adAccountId": "...", "campaignFilter": "Webinar"}}` (`campaignFilter` is optional) |
+| `META_ACCESS_TOKEN` | Needed with `META_CLIENTS`: a Meta system user token with `ads_read` on those ad accounts. Until it's set, spend tiles show "Couldn't load from Meta" |
 | `ADMIN_EMAIL` | Optional, defaults to `info@funnelhaus.co` |
 
 ## Signing in

@@ -2,13 +2,14 @@
 // never reaches the browser, and only a total per day leaves the server.
 //
 // META_CLIENTS (env) maps a Notion client id to its ad account:
-//   {"<notion client id>": {"adAccountId": "407837286889537", "token": "EAA...", "campaignFilter": "Webinar"}}
-// The token needs ads_read on that account (a Business Manager system user token).
+//   {"<notion client id>": {"adAccountId": "407837286889537", "campaignFilter": "Webinar"}}
+// The token is META_ACCESS_TOKEN (a Business Manager system user token with ads_read on every
+// listed account); an account can carry its own "token" instead.
 // campaignFilter is optional: only campaigns whose name contains it count.
 
 import "server-only";
 
-type Account = { adAccountId: string; token: string; campaignFilter?: string };
+type Account = { adAccountId: string; token?: string; campaignFilter?: string };
 
 const GRAPH = "https://graph.facebook.com/v24.0";
 const FX = "https://api.frankfurter.dev/v1";
@@ -25,12 +26,9 @@ function accounts(): Record<string, Account> {
   }
 }
 
-/** Whether this client has an ad account connected (spend tiles show only for them). */
-export const hasAdAccount = (clientId: string) => !!accounts()[normalise(clientId)]?.token;
-
 type Day = { day: string; spend: number; currency: string };
 
-async function fetchDays(account: Account): Promise<Day[]> {
+async function fetchDays(account: Account, token: string): Promise<Day[]> {
   const url = new URL(`${GRAPH}/act_${account.adAccountId.replace(/^act_/, "")}/insights`);
   url.searchParams.set("level", "account");
   url.searchParams.set("fields", "spend,account_currency");
@@ -40,7 +38,7 @@ async function fetchDays(account: Account): Promise<Day[]> {
   if (account.campaignFilter) {
     url.searchParams.set("filtering", JSON.stringify([{ field: "campaign.name", operator: "CONTAIN", value: account.campaignFilter }]));
   }
-  url.searchParams.set("access_token", account.token);
+  url.searchParams.set("access_token", token);
 
   const days: Day[] = [];
   for (let next: string | undefined = url.toString(); next; ) {
@@ -73,7 +71,12 @@ async function usdRates(currency: string, since: string, until: string): Promise
 
 /** Spend per ad-account day in USD. Weekends and holidays use the last working day's rate. */
 async function fetchSpend(account: Account): Promise<Record<string, number>> {
-  const days = (await fetchDays(account)).filter((d) => d.spend > 0).sort((a, b) => a.day.localeCompare(b.day));
+  const token = account.token ?? process.env.META_ACCESS_TOKEN;
+  if (!token) {
+    console.error("No Meta token: set META_ACCESS_TOKEN");
+    throw new Error("Meta not connected");
+  }
+  const days = (await fetchDays(account, token)).filter((d) => d.spend > 0).sort((a, b) => a.day.localeCompare(b.day));
   if (!days.length) return {};
   const currency = days[0].currency;
   if (currency === "USD") return Object.fromEntries(days.map((d) => [d.day, d.spend]));
@@ -94,7 +97,7 @@ const cache = new Map<string, { at: number; result: Promise<Record<string, numbe
 export async function getDailySpend(clientId: string): Promise<Record<string, number> | null> {
   const key = normalise(clientId);
   const account = accounts()[key];
-  if (!account?.token) return null;
+  if (!account) return null;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.result;
   const result = fetchSpend(account);
