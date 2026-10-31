@@ -290,14 +290,14 @@ export function RegistrantsDashboard({
       {/* Headline numbers */}
       {spend || tracksVip ? (
         <>
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Stat label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} accent />
-            {spend && <Stat label="Ad spend" value={spent === null ? "—" : usd(spent)} hint={spendHint} />}
-            {spend && <Stat label="Cost per registrant" value={costPer(fromAds)} hint={`Ad spend ÷ ${fromAds.toLocaleString("en-GB")} from ads`} />}
-            {tracksVip && <Stat label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
-            {tracksVip && <Stat label="VIP uptake" value={uptake(vipPurchases, shown.length)} hint="VIP purchases ÷ registrants" />}
+          <section className="card divide-y divide-line px-5 sm:px-6">
+            <MetricRow label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} />
+            {spend && <MetricRow label="Ad spend" value={spent === null ? "—" : usd(spent)} hint={spendHint} />}
+            {spend && <MetricRow label="Cost per registrant" value={costPer(fromAds)} hint={`Ad spend ÷ ${fromAds.toLocaleString("en-GB")} from ads`} />}
+            {tracksVip && <MetricRow label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
+            {tracksVip && <MetricRow label="VIP uptake" value={uptake(vipPurchases, shown.length)} hint="VIP purchases ÷ registrants" />}
             {spend && tracksVip && (
-              <Stat label="Cost per VIP purchase" value={costPer(vipsFromAds)} hint={`Ad spend ÷ ${vipsFromAds.toLocaleString("en-GB")} from ads`} />
+              <MetricRow label="Cost per VIP purchase" value={costPer(vipsFromAds)} hint={`Ad spend ÷ ${vipsFromAds.toLocaleString("en-GB")} from ads`} />
             )}
           </section>
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -382,6 +382,19 @@ function Select({ label, value, onChange, children }: { label: string; value: st
         {children}
       </select>
     </label>
+  );
+}
+
+/** One headline metric as a line: name and how it's worked out on the left, the number on the right. */
+function MetricRow({ label, value, hint }: { label: string; value: number | string; hint: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-4">
+      <div className="min-w-0">
+        <p className="text-[15px] font-semibold text-ink">{label}</p>
+        <p className="mt-0.5 text-[12.5px] text-faint">{hint}</p>
+      </div>
+      <p className="shrink-0 text-[26px] leading-none font-bold tracking-[-0.02em] text-ink tabular-nums">{value.toLocaleString("en-GB")}</p>
+    </div>
   );
 }
 
