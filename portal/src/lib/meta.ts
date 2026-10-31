@@ -32,31 +32,51 @@ function accounts(): Record<string, Account> {
 
 type Row = { day: string; campaign: string; ad: string; spend: number; currency: string };
 
-async function fetchRows(account: Account, token: string): Promise<Row[]> {
-  const url = new URL(`${GRAPH}/act_${account.adAccountId.replace(/^act_/, "")}/insights`);
-  url.searchParams.set("level", "ad");
-  url.searchParams.set("fields", "campaign_name,ad_name,spend,account_currency");
-  url.searchParams.set("date_preset", "maximum");
-  url.searchParams.set("time_increment", "1");
-  url.searchParams.set("limit", "500");
-  url.searchParams.set("access_token", token);
+async function graph<T>(url: URL | string): Promise<T> {
+  const res = await fetch(url, { cache: "no-store" });
+  const data = await res.json();
+  if (!res.ok) {
+    // Log details server-side; the page shows a friendly message.
+    console.error(`Meta request failed: ${res.status} ${data?.error?.message ?? JSON.stringify(data)}`);
+    throw new Error("Meta request failed");
+  }
+  return data as T;
+}
 
-  const wanted = new Set((account.campaigns ?? []).map(nameKey));
-  const rows: Row[] = [];
+/** Every page of a Graph API list. */
+async function graphList<T>(url: URL): Promise<T[]> {
+  const items: T[] = [];
   for (let next: string | undefined = url.toString(); next; ) {
-    const res: Response = await fetch(next, { cache: "no-store" });
-    const data = await res.json();
-    if (!res.ok) {
-      // Log details server-side; the page shows a friendly message.
-      console.error(`Meta insights failed: ${res.status} ${data?.error?.message ?? JSON.stringify(data)}`);
-      throw new Error("Meta request failed");
-    }
-    for (const r of data.data ?? []) {
+    const page: { data?: T[]; paging?: { next?: string } } = await graph(next);
+    items.push(...(page.data ?? []));
+    next = page.paging?.next;
+  }
+  return items;
+}
+
+async function fetchRows(account: Account, token: string): Promise<Row[]> {
+  // Find the client's campaigns by exact name first, then ask only for their ads: daily spend
+  // for every ad in a shared account since it opened is more than Meta will answer in one go.
+  const list = new URL(`${GRAPH}/act_${account.adAccountId.replace(/^act_/, "")}/campaigns`);
+  list.searchParams.set("fields", "id,name");
+  list.searchParams.set("limit", "500");
+  list.searchParams.set("access_token", token);
+  const wanted = new Set((account.campaigns ?? []).map(nameKey));
+  const campaigns = (await graphList<{ id: string; name: string }>(list)).filter((c) => wanted.has(nameKey(c.name)));
+
+  const rows: Row[] = [];
+  for (const campaign of campaigns) {
+    const url = new URL(`${GRAPH}/${campaign.id}/insights`);
+    url.searchParams.set("level", "ad");
+    url.searchParams.set("fields", "ad_name,spend,account_currency");
+    url.searchParams.set("date_preset", "maximum");
+    url.searchParams.set("time_increment", "1");
+    url.searchParams.set("limit", "500");
+    url.searchParams.set("access_token", token);
+    for (const r of await graphList<{ date_start: string; ad_name: string; spend?: string; account_currency: string }>(url)) {
       const spend = Number(r.spend ?? 0);
-      if (!spend || !wanted.has(nameKey(r.campaign_name ?? ""))) continue;
-      rows.push({ day: r.date_start, campaign: r.campaign_name, ad: r.ad_name, spend, currency: r.account_currency });
+      if (spend) rows.push({ day: r.date_start, campaign: campaign.name, ad: r.ad_name, spend, currency: r.account_currency });
     }
-    next = data.paging?.next;
   }
   return rows.sort((a, b) => a.day.localeCompare(b.day));
 }
