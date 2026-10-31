@@ -73,7 +73,13 @@ export function RegistrantsDashboard({
   );
   const minute = useSyncExternalStore(subscribeMinute, currentMinute, () => Math.floor(fetchedAt / MINUTE));
   const now = minute * MINUTE;
-  const [webinar, setWebinar] = useState("all");
+  // Open on the next webinar (today's included), or the latest one if none is coming up.
+  const [defaultWebinar] = useState(() => {
+    const keys = [...new Set([...known.map((w) => w.key), ...registrants.flatMap((r) => r.webinars.map((w) => w.key))])].sort();
+    const day = dayIn(new Date(fetchedAt).toISOString(), DEFAULT_TZ);
+    return keys.find((k) => k >= day) ?? keys[keys.length - 1] ?? "all";
+  });
+  const [webinar, setWebinar] = useState(defaultWebinar);
   const [range, setRange] = useState<Range>("all");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [dimension, setDimension] = useState<Dimension>("source");
@@ -104,11 +110,18 @@ export function RegistrantsDashboard({
   let vipPurchases = 0;
   let fromAds = 0;
   let vipsFromAds = 0;
+  // The same counts per value of the breakdown dimension, for the table's money columns.
+  const byValue = new Map<string, Counts>();
   for (const r of matching) {
     if (!inRange(r)) continue;
     if (r.vip) vipPurchases++;
     if (r.ad) fromAds++;
     if (r.ad && r.vip) vipsFromAds++;
+    const c = byValue.get(valueOf(r, dimension)) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 };
+    if (r.ad) c.fromAds++;
+    if (r.vip) c.vips++;
+    if (r.ad && r.vip) c.vipsFromAds++;
+    byValue.set(valueOf(r, dimension), c);
   }
   const newToday = matching.filter((r) => dayIn(r.addedAt, zone) === today).length;
   const last7 = matching.filter((r) => dayIn(r.addedAt, zone) > daysAgo(7)).length;
@@ -126,7 +139,8 @@ export function RegistrantsDashboard({
     return (value: string) => map.get(value) ?? MUTED;
   }, [registrants, dimension]);
 
-  const slices = useMemo(() => {
+  // Not memoised by hand: the React Compiler handles it, and a manual memo here blocks it.
+  const slices = (() => {
     const counts = new Map<string, number>();
     for (const r of shown) counts.set(valueOf(r, dimension), (counts.get(valueOf(r, dimension)) ?? 0) + 1);
     const sorted = [...counts].map(([label, count]) => ({ label, count, colour: isEmpty(label) ? MUTED : colours(label) }));
@@ -136,7 +150,7 @@ export function RegistrantsDashboard({
     const rest = sorted.filter((s) => s.colour === MUTED && !isEmpty(s.label));
     if (rest.length) own.push({ label: OTHER, count: rest.reduce((n, s) => n + s.count, 0), colour: "#6f6f6b" });
     return own;
-  }, [shown, dimension, colours]);
+  })();
 
 
   // Spend over the same days and filters as the registrants. A webinar's spend is every day after the
@@ -174,6 +188,25 @@ export function RegistrantsDashboard({
             ? "Meta ads, in USD"
             : "Meta ads since the last webinar";
   const costPer = (count: number) => (spent === null ? "—" : count ? usd(spent / count) : "—");
+
+  // Spend per breakdown row: the ad's (Ad or Content) or the campaign's (Source or Content), within the
+  // same days and filters as the tiles. Rows with no spend behind them (Instagram...) show a dash.
+  const spendFor = (label: string): number | null => {
+    if (!spend || spend === "error" || unattributable) return null;
+    const key = nameKey(label);
+    const match =
+      (dimension === "ad" || dimension === "content") && ads.has(key)
+        ? (r: SpendRow) => nameKey(r.ad) === key
+        : (dimension === "source" || dimension === "content") && campaigns.has(key)
+          ? (r: SpendRow) => nameKey(r.campaign) === key
+          : null;
+    if (!match) return null;
+    return rows.reduce((sum, r) => (match(r) && spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.usd : sum), 0);
+  };
+  const showSpend = !!spend && (dimension === "ad" || dimension === "source" || dimension === "content");
+  const money = Object.fromEntries(
+    slices.map((sl) => [sl.label, { spend: sl.label === OTHER ? null : spendFor(sl.label), ...(byValue.get(sl.label) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 }) }]),
+  );
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
   const toggleSlice = (label: string) => {
@@ -183,7 +216,7 @@ export function RegistrantsDashboard({
   const clearAll = () => {
     setFilters(NO_FILTERS);
     setRange("all");
-    setWebinar("all");
+    setWebinar(defaultWebinar);
   };
 
   const rangeLabel = RANGES.find((r) => r.key === range)!.label.toLowerCase();
@@ -220,7 +253,7 @@ export function RegistrantsDashboard({
             </Select>
           ))}
         </div>
-        {(active.length > 0 || range !== "all" || webinar !== "all") && (
+        {(active.length > 0 || range !== "all" || webinar !== defaultWebinar) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
             {active.map(({ key, label }) => (
               <button
@@ -294,7 +327,15 @@ export function RegistrantsDashboard({
         ) : (
           <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[280px_1fr]">
             <Donut slices={slices} total={shown.length} selected={filters[dimension]} onSelect={toggleSlice} />
-            <BreakdownTable slices={slices} total={shown.length} selected={filters[dimension]} onSelect={toggleSlice} />
+            <BreakdownTable
+              slices={slices}
+              total={shown.length}
+              selected={filters[dimension]}
+              onSelect={toggleSlice}
+              money={money}
+              showSpend={showSpend}
+              showVip={tracksVip}
+            />
           </div>
         )}
         <p className="mt-5 text-[12.5px] text-muted">
@@ -340,6 +381,8 @@ function Stat({ label, value, hint, accent = false }: { label: string; value: nu
 }
 
 type Slice = { label: string; count: number; colour: string };
+type Counts = { fromAds: number; vips: number; vipsFromAds: number };
+type Money = Counts & { spend: number | null };
 const pct = (n: number, total: number) => `${Math.round((n / total) * 100)}%`;
 
 /** A donut of the breakdown, with a 2px white gap between slices and a tooltip on hover. */
@@ -413,39 +456,72 @@ function Donut({ slices, total, selected, onSelect }: { slices: Slice[]; total: 
   );
 }
 
-/** Every slice as a row: colour, name, count and share. Doubles as the chart's legend and table view. */
-function BreakdownTable({ slices, total, selected, onSelect }: { slices: Slice[]; total: number; selected: string; onSelect: (label: string) => void }) {
+/**
+ * Every slice as a row: colour, name, count and share, plus spend, VIP purchases and both costs where
+ * there's spend behind the dimension. Doubles as the chart's legend and table view.
+ */
+function BreakdownTable({
+  slices,
+  total,
+  selected,
+  onSelect,
+  money,
+  showSpend,
+  showVip,
+}: {
+  slices: Slice[];
+  total: number;
+  selected: string;
+  onSelect: (label: string) => void;
+  money: Record<string, Money>;
+  showSpend: boolean;
+  showVip: boolean;
+}) {
+  const cost = (m: Money | undefined, count: number | undefined) => (m?.spend == null || !count ? "—" : usd(m.spend / count));
+  const th = "pb-2 pl-3 text-right font-semibold whitespace-nowrap";
+  const td = "py-2.5 pl-3 text-right tabular-nums whitespace-nowrap";
   return (
-    <table className="w-full text-[14px]">
-      <thead>
-        <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
-          <th className="pb-2 font-semibold">Value</th>
-          <th className="pb-2 text-right font-semibold">Registrants</th>
-          <th className="w-16 pb-2 text-right font-semibold">Share</th>
-        </tr>
-      </thead>
-      <tbody>
-        {slices.map((s) => {
-          const clickable = s.label !== OTHER;
-          const isSelected = selected === s.label;
-          return (
-            <tr
-              key={s.label}
-              onClick={clickable ? () => onSelect(s.label) : undefined}
-              className={`border-b border-line/70 last:border-0 ${clickable ? "cursor-pointer hover:bg-canvas" : ""} ${isSelected ? "bg-brand-soft/60" : ""}`}
-            >
-              <td className="py-2.5 pr-3">
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="size-3 shrink-0 rounded-full" style={{ background: s.colour }} />
-                  <span className={`min-w-0 break-all ${isEmpty(s.label) || s.label === OTHER ? "text-muted" : "font-medium text-ink"}`}>{s.label}</span>
-                </span>
-              </td>
-              <td className="py-2.5 text-right font-semibold text-ink tabular-nums">{s.count.toLocaleString("en-GB")}</td>
-              <td className="py-2.5 text-right text-muted tabular-nums">{pct(s.count, total)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-[14px]">
+        <thead>
+          <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
+            <th className="pb-2 font-semibold">Value</th>
+            <th className={th}>Registrants</th>
+            <th className={`w-16 ${th}`}>Share</th>
+            {showSpend && <th className={th}>Spend</th>}
+            {showSpend && <th className={th}>Cost / reg</th>}
+            {showVip && <th className={th}>VIP</th>}
+            {showSpend && showVip && <th className={th}>Cost / VIP</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {slices.map((s) => {
+            const clickable = s.label !== OTHER;
+            const isSelected = selected === s.label;
+            const m = money[s.label];
+            return (
+              <tr
+                key={s.label}
+                onClick={clickable ? () => onSelect(s.label) : undefined}
+                className={`border-b border-line/70 last:border-0 ${clickable ? "cursor-pointer hover:bg-canvas" : ""} ${isSelected ? "bg-brand-soft/60" : ""}`}
+              >
+                <td className="py-2.5 pr-3">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className="size-3 shrink-0 rounded-full" style={{ background: s.colour }} />
+                    <span className={`min-w-0 break-all ${isEmpty(s.label) || s.label === OTHER ? "text-muted" : "font-medium text-ink"}`}>{s.label}</span>
+                  </span>
+                </td>
+                <td className={`${td} font-semibold text-ink`}>{s.count.toLocaleString("en-GB")}</td>
+                <td className={`${td} text-muted`}>{pct(s.count, total)}</td>
+                {showSpend && <td className={`${td} text-ink`}>{m?.spend == null ? "—" : usd(m.spend)}</td>}
+                {showSpend && <td className={`${td} text-ink`}>{cost(m, m?.fromAds)}</td>}
+                {showVip && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.vips ?? 0).toLocaleString("en-GB")}</td>}
+                {showSpend && showVip && <td className={`${td} text-ink`}>{cost(m, m?.vipsFromAds)}</td>}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
