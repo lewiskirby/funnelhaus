@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { formatDay } from "@/lib/calendar";
 import { getClientEvents } from "@/lib/data";
 import { getWebinarRegistrants, ghlContactsUrl, type Webinar } from "@/lib/ghl";
+import { getDailySpend } from "@/lib/meta";
 import { requireClient } from "@/lib/session";
 import { RegistrantsDashboard } from "./registrants-dashboard";
 
@@ -24,8 +25,12 @@ export default async function ResultsPage() {
   const ghlUrl = ghlContactsUrl(client.id);
   if (!ghlUrl) return <ComingSoon />;
 
-  // A GHL failure shows a message below; details are logged in ghl.ts.
-  const [data, events] = await Promise.all([getWebinarRegistrants(client.id).catch(() => null), getClientEvents(client.id)]);
+  // A GHL failure shows a message below; details are logged in ghl.ts. A Meta failure only blanks the spend tiles.
+  const [data, events, spend] = await Promise.all([
+    getWebinarRegistrants(client.id).catch(() => null),
+    getClientEvents(client.id),
+    getDailySpend(client.id).catch(() => "error" as const),
+  ]);
 
   // Upcoming webinars from the tracker show in the filter before anyone registers,
   // alongside every webinar tagged in GHL. Matched by date, so each appears once.
@@ -41,10 +46,19 @@ export default async function ResultsPage() {
     <div className="space-y-8">
       <header>
         <h1 className="text-[34px] leading-tight font-bold tracking-[-0.03em] text-ink sm:text-[40px]">Performance</h1>
-        <p className="mt-2 text-[15px] text-muted">Your webinar registrants from GoHighLevel, and where they came from. Updated every few minutes.</p>
+        <p className="mt-2 text-[15px] text-muted">
+          Your webinar registrants from GoHighLevel, where they came from{spend ? ", and what they cost" : ""}. Updated every few minutes.
+        </p>
       </header>
       {data ? (
-        <RegistrantsDashboard registrants={data.registrants} webinars={[...webinars.values()]} fetchedAt={data.fetchedAt} ghlUrl={ghlUrl} />
+        <RegistrantsDashboard
+          registrants={data.registrants}
+          tracksVip={data.tracksVip}
+          spend={spend}
+          webinars={[...webinars.values()]}
+          fetchedAt={data.fetchedAt}
+          ghlUrl={ghlUrl}
+        />
       ) : (
         <p className="rounded-2xl bg-brand-soft px-5 py-4 text-[14.5px] text-brand">
           We couldn&apos;t load your registrants from GoHighLevel just now. Please refresh in a minute.

@@ -68,10 +68,27 @@ type Contact = {
   searchAfter?: unknown[];
 };
 
-type FieldKey = "utm_source" | "utm_medium" | "utm_campaign" | "utm_content" | "trakyo_source" | "trakyo_content" | "trakyo_last_touch";
-const FIELD_KEYS: FieldKey[] = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "trakyo_source", "trakyo_content", "trakyo_last_touch"];
+type FieldKey =
+  | "utm_source"
+  | "utm_medium"
+  | "utm_campaign"
+  | "utm_content"
+  | "trakyo_source"
+  | "trakyo_content"
+  | "trakyo_last_touch"
+  | "vip_ticket_purchased";
+const FIELD_KEYS: FieldKey[] = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "trakyo_source",
+  "trakyo_content",
+  "trakyo_last_touch",
+  "vip_ticket_purchased",
+];
 
-/** The ids of the UTM and Trakyo custom fields, by their field key (contact.utm_source and so on). */
+/** The ids of the UTM, Trakyo and VIP custom fields, by their field key (contact.utm_source and so on). */
 async function fieldIds(account: Account): Promise<Partial<Record<FieldKey, string>>> {
   const { customFields } = await ghl<{ customFields: { id: string; fieldKey?: string }[] }>(
     account,
@@ -134,7 +151,7 @@ async function fetchWebinarTags(account: Account): Promise<Webinar[]> {
   return (tags ?? []).map((t) => webinarOf(t.name)).filter((w): w is Webinar => w !== null);
 }
 
-async function fetchRegistrants(account: Account): Promise<Registrant[]> {
+async function fetchRegistrants(account: Account): Promise<{ registrants: Registrant[]; tracksVip: boolean }> {
   const ids = await fieldIds(account);
   const contacts: Contact[] = [];
   let searchAfter: unknown[] | undefined;
@@ -202,7 +219,9 @@ async function fetchRegistrants(account: Account): Promise<Registrant[]> {
     return name ?? (utm.content ? `Ad ${utm.content}` : "Unnamed ad");
   };
 
-  return rows.map((row) => {
+  // "VIP Ticket Purchased" is set to Yes when someone buys the VIP upgrade; clients without the field have no VIP numbers.
+  const vipField = ids.vip_ticket_purchased;
+  const registrants = rows.map((row) => {
     const { c, utm, trakyo, webinars } = row;
     return {
       addedAt: c.dateAdded,
@@ -212,11 +231,13 @@ async function fetchRegistrants(account: Account): Promise<Registrant[]> {
       content: trakyo.content ?? (trakyo.source ? undefined : (utm.content ?? utm.campaign)),
       lastTouch: trakyo.last,
       tracking: trakyo.source ? "Trakyo" : utm.source ? "UTM" : "Not tracked",
+      vip: vipField ? c.customFields?.find((f) => f.id === vipField)?.value === "Yes" : undefined,
     } satisfies Registrant;
   });
+  return { registrants, tracksVip: !!vipField };
 }
 
-type Fetched = { registrants: Registrant[]; webinars: Webinar[]; fetchedAt: number };
+type Fetched = { registrants: Registrant[]; tracksVip: boolean; webinars: Webinar[]; fetchedAt: number };
 const cache = new Map<string, { at: number; result: Promise<Fetched> }>();
 
 /**
@@ -230,8 +251,9 @@ export async function getWebinarRegistrants(clientId: string): Promise<Fetched |
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.result;
   const at = Date.now();
-  const result = Promise.all([fetchRegistrants(account), fetchWebinarTags(account).catch(() => [])]).then(([registrants, webinars]) => ({
+  const result = Promise.all([fetchRegistrants(account), fetchWebinarTags(account).catch(() => [])]).then(([{ registrants, tracksVip }, webinars]) => ({
     registrants,
+    tracksVip,
     webinars,
     fetchedAt: at,
   }));

@@ -48,13 +48,19 @@ const valueOf = (r: Registrant, d: Dimension) => r[d] ?? (d === "ad" ? NOT_AN_AD
 type Filters = Record<Dimension, string>;
 const NO_FILTERS: Filters = { source: "", ad: "", content: "", lastTouch: "", tracking: "" };
 
+const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n >= 1000 ? 0 : 2 });
+
 export function RegistrantsDashboard({
   registrants,
+  tracksVip,
+  spend,
   webinars: known,
   ghlUrl,
   fetchedAt,
 }: {
   registrants: Registrant[];
+  tracksVip: boolean; // the client has a "VIP Ticket Purchased" field in GHL
+  spend: Record<string, number> | "error" | null; // Meta spend in USD by ad-account day; null if no ad account is connected
   webinars: { key: string; label: string }[]; // tagged in GHL or on the calendar, including upcoming ones
   ghlUrl: string;
   fetchedAt: number;
@@ -93,6 +99,7 @@ export function RegistrantsDashboard({
     return range === "today" ? day === today : day > daysAgo(Number(range));
   };
   const shown = matching.filter(inRange);
+  const vipPurchases = matching.filter((r) => r.vip && inRange(r)).length;
   const newToday = matching.filter((r) => dayIn(r.addedAt, zone) === today).length;
   const last7 = matching.filter((r) => dayIn(r.addedAt, zone) > daysAgo(7)).length;
 
@@ -121,6 +128,20 @@ export function RegistrantsDashboard({
     return own;
   }, [shown, dimension, colours]);
 
+
+  // Spend over the same days. A webinar's spend is every day after the webinar before it, up to its own day.
+  // Spend can't be split by source or ad, so it's left out while one of those filters is on.
+  const after = webinars.reduce((prev, w) => (w.key < webinar && w.key > prev ? w.key : prev), "");
+  const spendDay = (day: string) =>
+    (webinar === "all" || (day > after && day <= webinar)) &&
+    (range === "all" || (range === "today" ? day === today : day > daysAgo(Number(range))));
+  const spent =
+    spend && spend !== "error" && !DIMENSIONS.some(({ key }) => filters[key])
+      ? Object.entries(spend).reduce((sum, [day, amount]) => (spendDay(day) ? sum + amount : sum), 0)
+      : null;
+  const spendHint =
+    spend === "error" ? "Couldn't load from Meta" : spent === null ? "Clear source filters to see" : webinar === "all" ? "Meta ads, in USD" : "Meta ads since the last webinar";
+  const costPer = (count: number) => (spent === null ? "—" : count ? usd(spent / count) : "—");
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
   const toggleSlice = (label: string) => {
@@ -188,11 +209,27 @@ export function RegistrantsDashboard({
       </section>
 
       {/* Headline numbers */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} accent />
-        <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />
-        <Stat label="Last 7 days" value={last7} hint="Including today" />
-      </section>
+      {spend || tracksVip ? (
+        <>
+          <section className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${spend && tracksVip ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}>
+            <Stat label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} accent />
+            {spend && <Stat label="Ad spend" value={spent === null ? "—" : usd(spent)} hint={spendHint} />}
+            {spend && <Stat label="Cost per registrant" value={costPer(shown.length)} hint="Ad spend ÷ registrants" />}
+            {tracksVip && <Stat label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
+            {spend && tracksVip && <Stat label="Cost per VIP purchase" value={costPer(vipPurchases)} hint="Ad spend ÷ VIP purchases" />}
+          </section>
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />
+            <Stat label="Last 7 days" value={last7} hint="Including today" />
+          </section>
+        </>
+      ) : (
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Stat label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} accent />
+          <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />
+          <Stat label="Last 7 days" value={last7} hint="Including today" />
+        </section>
+      )}
 
       {/* Breakdown */}
       <section className="card p-5 sm:p-6">
@@ -258,7 +295,7 @@ function Select({ label, value, onChange, children }: { label: string; value: st
   );
 }
 
-function Stat({ label, value, hint, accent = false }: { label: string; value: number; hint: string; accent?: boolean }) {
+function Stat({ label, value, hint, accent = false }: { label: string; value: number | string; hint: string; accent?: boolean }) {
   return (
     <div className={`rounded-[20px] p-5 ${accent ? "bg-ink-2 text-white" : "card"}`}>
       <p className={`text-[12.5px] font-semibold ${accent ? "text-white/55" : "text-muted"}`}>{label}</p>

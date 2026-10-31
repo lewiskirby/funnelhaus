@@ -111,6 +111,7 @@ export interface Registrant {
   content?: string; // Trakyo content (post, ad or video), or utm_content / utm_campaign
   lastTouch?: string; // Trakyo last touch, "Instagram · IG BIO → Register"
   tracking: "Trakyo" | "UTM" | "Not tracked";
+  vip?: boolean; // bought the VIP upgrade (GHL field "VIP Ticket Purchased" = Yes); undefined if the client has no such field
 }
 
 // Page content from Notion, reduced to what the portal renders.
