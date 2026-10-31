@@ -290,11 +290,12 @@ export function RegistrantsDashboard({
       {/* Headline numbers */}
       {spend || tracksVip ? (
         <>
-          <section className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${spend && tracksVip ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}>
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Stat label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} accent />
             {spend && <Stat label="Ad spend" value={spent === null ? "—" : usd(spent)} hint={spendHint} />}
             {spend && <Stat label="Cost per registrant" value={costPer(fromAds)} hint={`Ad spend ÷ ${fromAds.toLocaleString("en-GB")} from ads`} />}
             {tracksVip && <Stat label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
+            {tracksVip && <Stat label="VIP uptake" value={uptake(vipPurchases, shown.length)} hint="VIP purchases ÷ registrants" />}
             {spend && tracksVip && (
               <Stat label="Cost per VIP purchase" value={costPer(vipsFromAds)} hint={`Ad spend ÷ ${vipsFromAds.toLocaleString("en-GB")} from ads`} />
             )}
@@ -398,6 +399,8 @@ type Slice = { label: string; count: number; colour: string };
 type Counts = { fromAds: number; vips: number; vipsFromAds: number };
 type Money = Counts & { spend: number | null };
 const pct = (n: number, total: number) => `${Math.round((n / total) * 100)}%`;
+/** VIP purchases as a share of registrants, to one decimal place. */
+const uptake = (vips: number, registrants: number) => (registrants ? `${((vips / registrants) * 100).toFixed(1)}%` : "—");
 
 /** A donut of the breakdown, with a 2px white gap between slices and a tooltip on hover. */
 function Donut({ slices, total, selected, onSelect }: { slices: Slice[]; total: number; selected: string; onSelect: (label: string) => void }) {
@@ -505,6 +508,7 @@ function BreakdownTable({
             {showSpend && <th className={th}>Spend</th>}
             {showSpend && <th className={th}>Cost / reg</th>}
             {showVip && <th className={th}>VIP</th>}
+            {showVip && <th className={th}>VIP %</th>}
             {showSpend && showVip && <th className={th}>Cost / VIP</th>}
           </tr>
         </thead>
@@ -530,6 +534,7 @@ function BreakdownTable({
                 {showSpend && <td className={`${td} text-ink`}>{m?.spend == null ? "—" : usd(m.spend)}</td>}
                 {showSpend && <td className={`${td} text-ink`}>{cost(m, m?.fromAds)}</td>}
                 {showVip && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.vips ?? 0).toLocaleString("en-GB")}</td>}
+                {showVip && <td className={`${td} text-muted`}>{s.label === OTHER ? "—" : uptake(m?.vips ?? 0, s.count)}</td>}
                 {showSpend && showVip && <td className={`${td} text-ink`}>{cost(m, m?.vipsFromAds)}</td>}
               </tr>
             );
