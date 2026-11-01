@@ -54,6 +54,7 @@ const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", curren
 export function RegistrantsDashboard({
   registrants,
   tracksVip,
+  tracksCalls,
   spend,
   webinars: known,
   ghlUrl,
@@ -61,6 +62,7 @@ export function RegistrantsDashboard({
 }: {
   registrants: Registrant[];
   tracksVip: boolean; // the client has a "VIP Ticket Purchased" field in GHL
+  tracksCalls: boolean; // the client has an "Appointment Booked Date" field in GHL
   spend: SpendRow[] | "error" | null; // Meta spend in USD per ad and day; null if no ad account is connected
   webinars: { key: string; label: string }[]; // tagged in GHL or on the calendar, including upcoming ones
   ghlUrl: string;
@@ -123,6 +125,11 @@ export function RegistrantsDashboard({
     if (r.ad && r.vip) c.vipsFromAds++;
     byValue.set(valueOf(r, dimension), c);
   }
+  // A call counts when it was booked on or after the day of the webinar they registered for (any of
+  // theirs under "All webinars"). The GHL field holds a day, not a time.
+  const callsBooked = shown.filter(
+    (r) => r.callBookedOn && r.webinars.some((w) => (webinar === "all" || w.key === webinar) && r.callBookedOn! >= w.key),
+  ).length;
   const newToday = matching.filter((r) => dayIn(r.addedAt, zone) === today).length;
   const last7 = matching.filter((r) => dayIn(r.addedAt, zone) > daysAgo(7)).length;
 
@@ -288,7 +295,7 @@ export function RegistrantsDashboard({
       </section>
 
       {/* Headline numbers */}
-      {spend || tracksVip ? (
+      {spend || tracksVip || tracksCalls ? (
         <>
           <section className="card divide-y divide-line px-5 sm:px-6">
             <MetricRow label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} />
@@ -299,6 +306,7 @@ export function RegistrantsDashboard({
             {spend && tracksVip && (
               <MetricRow label="Cost per VIP purchase" value={costPer(vipsFromAds)} hint={`Ad spend ÷ ${vipsFromAds.toLocaleString("en-GB")} from ads`} />
             )}
+            {tracksCalls && <MetricRow label="Calls booked" value={callsBooked} hint="Registrants who booked a call on or after the webinar day" />}
           </section>
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />

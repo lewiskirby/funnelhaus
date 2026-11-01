@@ -54,6 +54,7 @@ export default async function ResultsPage() {
         <RegistrantsDashboard
           registrants={data.registrants}
           tracksVip={data.tracksVip}
+          tracksCalls={data.tracksCalls}
           spend={spend}
           webinars={[...webinars.values()]}
           fetchedAt={data.fetchedAt}
