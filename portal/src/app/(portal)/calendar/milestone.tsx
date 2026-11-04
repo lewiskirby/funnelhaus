@@ -1,32 +1,23 @@
 "use client";
 
-// Milestone tools in the calendar pop-up: approve (or undo) and edit the page's
+// Milestone tools in the calendar pop-up: mark as posted (or undo) and edit the page's
 // text. Everything is saved straight to the milestone in Notion.
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Icon } from "@/components/ui";
 import { BLOCK_TEXT_MAX } from "@/lib/limits";
 import type { BlockEdits, EditableBlock, LaunchTask } from "@/lib/types";
-import {
-  approveMilestone,
-  loadMilestoneEditor,
-  markMilestonePosted,
-  saveMilestone,
-  undoMilestoneApproval,
-  undoMilestonePosted,
-} from "./actions";
+import { loadMilestoneEditor, markMilestonePosted, saveMilestone, undoMilestonePosted } from "./actions";
 
 const primary =
   "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40";
-// Approve is a plain dark button, so it never looks already chosen.
-const approveClass =
+// Mark as posted is a plain dark button, so it never looks already chosen.
+const markPostedClass =
   "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 text-[14px] font-semibold text-white transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40";
 const secondary =
   "flex min-h-11 items-center justify-center gap-2 rounded-xl bg-card px-5 text-[14px] font-semibold text-ink ring-1 ring-line transition hover:ring-ink/30 disabled:cursor-not-allowed disabled:opacity-40";
 const fieldClass =
   "block w-full resize-none rounded-xl border border-line bg-white px-3.5 py-2.5 text-[15px] leading-relaxed text-ink outline-none transition placeholder:text-faint focus:border-brand focus:ring-4 focus:ring-brand/10";
-
-const formatWhen = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short" });
 
 function ErrorNote({ error }: { error?: string }) {
   if (!error) return null;
@@ -37,13 +28,10 @@ function ErrorNote({ error }: { error?: string }) {
   );
 }
 
-// ── Approval ────────────────────────────────────────
+// ── Posted ──────────────────────────────────────────
 
-/**
- * Under the milestone: Edit and Approve; once approved, who approved it and a
- * button to confirm it's been posted; once posted, a note with a way to undo.
- */
-export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onEdit: () => void; onChanged: () => void }) {
+/** Under the milestone: Edit and Mark as posted; once posted, a note with a way to undo. */
+export function PostedBar({ item, onEdit, onChanged }: { item: LaunchTask; onEdit: () => void; onChanged: () => void }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
 
@@ -73,37 +61,14 @@ export function ApprovalBar({ item, onEdit, onChanged }: { item: LaunchTask; onE
             {pending ? "Undoing…" : "Not posted yet"}
           </button>
         </div>
-      ) : item.approved ? (
-        <>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-success-soft px-4 py-3">
-          <p className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-semibold text-success">
-            <Icon.check className="size-4 shrink-0" strokeWidth={2.25} />
-            <span>
-              Approved by {item.approved.by}
-              {item.approved.on && <span className="font-medium"> on {formatWhen(item.approved.on)}</span>}
-            </span>
-          </p>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => run(undoMilestoneApproval)}
-            className="text-[13.5px] font-semibold text-success underline underline-offset-2 hover:no-underline disabled:opacity-50"
-          >
-            Undo approval
-          </button>
-        </div>
-        <button type="button" disabled={pending} onClick={() => run(markMilestonePosted)} className={`${approveClass} w-full`}>
-          {pending ? "Saving…" : "Mark as posted"}
-        </button>
-        </>
       ) : (
         <div className="grid grid-cols-2 gap-2.5">
           <button type="button" disabled={pending} onClick={onEdit} className={secondary}>
             <Icon.pencil className="size-4" />
             Edit
           </button>
-          <button type="button" disabled={pending} onClick={() => run(approveMilestone)} className={approveClass}>
-            {pending ? "Approving…" : "Approve"}
+          <button type="button" disabled={pending} onClick={() => run(markMilestonePosted)} className={markPostedClass}>
+            {pending ? "Saving…" : "Mark as posted"}
           </button>
         </div>
       )}

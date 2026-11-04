@@ -542,9 +542,9 @@ export async function getCalendarItem(clientId: string, id: string): Promise<{ i
   return { item: withoutClients(item), blocks };
 }
 
-// ── Milestone approval and edits ────────────
-// Only milestones on this client's calendar. Approving locks editing until
-// the approval is undone, so nothing changes after sign-off unnoticed.
+// ── Milestone posting and edits ─────────────
+// Only milestones on this client's calendar. Marking as posted locks editing
+// until it's undone, so the page keeps matching what went out.
 
 type MilestoneResult = { ok: true } | { ok: false; error: string };
 
@@ -553,25 +553,10 @@ async function findOwnedMilestone(clientId: string, id: string) {
   return item && item.milestone && ownedBy(clientId)(item) ? item : null;
 }
 
-/** `by`: the name shown in Notion, or null to undo the approval. */
-export async function setMilestoneApproval(clientId: string, id: string, by: string | null): Promise<MilestoneResult> {
-  const item = await findOwnedMilestone(clientId, id);
-  if (!item) return { ok: false, error: "We couldn't find that milestone." };
-  if (by === null && item.posted) return { ok: false, error: "This has been marked as posted. Undo that first." };
-  try {
-    await notion.setApprovalInNotion(item.id, by);
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "We couldn't save that. Please try again." };
-  }
-}
-
-/** The milestone's blocks for the editor, or an error if it's approved or not this client's. */
-/** Confirms (or un-confirms) a milestone as posted. Only an approved milestone can be marked posted. */
+/** Confirms (or un-confirms) a milestone as posted. */
 export async function setMilestonePosted(clientId: string, id: string, posted: boolean): Promise<MilestoneResult> {
   const item = await findOwnedMilestone(clientId, id);
   if (!item) return { ok: false, error: "We couldn't find that milestone." };
-  if (posted && !item.approved) return { ok: false, error: "Approve this milestone before marking it as posted." };
   try {
     await notion.setPostedInNotion(item.id, posted);
     return { ok: true };
@@ -580,10 +565,11 @@ export async function setMilestonePosted(clientId: string, id: string, posted: b
   }
 }
 
+/** The milestone's blocks for the editor, or an error if it's posted or not this client's. */
 export async function getMilestoneEditor(clientId: string, id: string): Promise<{ blocks: EditableBlock[] } | { error: string }> {
   const item = await findOwnedMilestone(clientId, id);
   if (!item) return { error: "We couldn't find that milestone." };
-  if (item.approved) return { error: "This milestone is approved. Undo the approval to edit it." };
+  if (item.posted) return { error: "This has been marked as posted. Undo that to edit it." };
   try {
     return { blocks: await notion.listEditableBlocks(id) };
   } catch {
@@ -610,7 +596,7 @@ export async function saveMilestoneEdits(clientId: string, id: string, edits: Bl
   if (invalid) return { ok: false, error: invalid };
   const item = await findOwnedMilestone(clientId, id);
   if (!item) return { ok: false, error: "We couldn't find that milestone." };
-  if (item.approved) return { ok: false, error: "This milestone is approved. Undo the approval to edit it." };
+  if (item.posted) return { ok: false, error: "This has been marked as posted. Undo that to edit it." };
   try {
     await notion.applyBlockEdits(id, edits);
     return { ok: true };

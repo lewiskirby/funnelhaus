@@ -482,9 +482,9 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
 
 // ── Project Management Tracker ──────────────────────
 // Home shows unfinished task titles for the week. The launch calendar shows
-// only rows with Milestone or Event ticked (title, Due Date, Done or not, page
+// only rows with Milestone or Event ticked (title, Posting Date or Due Date, Done or not, page
 // icon, Client links, and the page body when opened). Milestones also use
-// Client Approved, Approved by, Approved on and Posted. Assignee, Links and SOP are never read.
+// Posted. Assignee, Links and SOP are never read.
 // Tasks with "Hide from client" ticked are never shown.
 
 /** Titles of this client's unfinished tracker tasks due between today and `days` from now. */
@@ -512,13 +512,18 @@ export async function queryUpcomingWork(clientId: string, days: number): Promise
 }
 
 // The launch calendar shows only tracker rows with Milestone or Event ticked.
+// Milestones sit on their Posting Date, or their Due Date until one is set.
+// Other events stay on Due Date, the date the portal edits and Home shows.
 const TIMED_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})[\d:.]*(Z|[+-]\d{2}:\d{2})$/;
+const CALENDAR_DATES = ["Posting Date", "Due Date"];
+const calendarDate = (page: Page) =>
+  (ticked(page, "Milestone") ? page.properties["Posting Date"]?.date : null) ?? page.properties["Due Date"]?.date;
 const onCalendar = (page: Page) =>
-  inTracker(page) && !ticked(page, "Hide from client") && (ticked(page, "Milestone") || ticked(page, "Event")) && Boolean(page.properties["Due Date"]?.date?.start);
+  inTracker(page) && !ticked(page, "Hide from client") && (ticked(page, "Milestone") || ticked(page, "Event")) && Boolean(calendarDate(page)?.start);
 
 function toLaunchItem(page: Page): LaunchTask & { clientIds: string[] } {
   const p = page.properties;
-  const date = p["Due Date"]!.date!;
+  const date = calendarDate(page)!;
   // Timed items keep the day and clock time they were set in, e.g. 20:00 GMT-4.
   const timed = TIMED_RE.exec(date.start);
   const start = timed?.[1] ?? date.start.slice(0, 10);
@@ -534,17 +539,14 @@ function toLaunchItem(page: Page): LaunchTask & { clientIds: string[] } {
     event: ticked(page, "Event"),
     icon: toIcon(page.icon),
     links: toRichText(p["Client links"]?.rich_text),
-    approved: ticked(page, "Milestone") && ticked(page, "Client Approved")
-      ? { by: text(p["Approved by"]) || "Your team", on: p["Approved on"]?.date?.start ?? undefined }
-      : undefined,
     posted: ticked(page, "Milestone") && ticked(page, "Posted"),
     clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
   };
 }
 
 /**
- * This client's launch calendar: milestones and events (done or not) whose Due
- * Date overlaps `from`..`to`. Ranges are found by start date, looking back a month.
+ * This client's launch calendar: milestones and events (done or not) whose
+ * calendar date overlaps `from`..`to`. Ranges are found by start date, looking back a month.
  */
 export async function queryLaunchItems(clientId: string, from: string, to: string): Promise<(LaunchTask & { clientIds: string[] })[]> {
   const lookBack = new Date(Date.parse(from) - 31 * 86_400_000).toISOString().slice(0, 10);
@@ -552,19 +554,21 @@ export async function queryLaunchItems(clientId: string, from: string, to: strin
     filter: {
       and: [
         { property: "Client", relation: { contains: clientId } },
-        { property: "Due Date", date: { on_or_after: lookBack } },
-        { property: "Due Date", date: { on_or_before: to } },
         { property: "Hide from client", checkbox: { equals: false } },
         { or: [{ property: "Milestone", checkbox: { equals: true } }, { property: "Event", checkbox: { equals: true } }] },
+        { or: CALENDAR_DATES.map((property) => ({ property, date: { on_or_after: lookBack } })) },
+        { or: CALENDAR_DATES.map((property) => ({ property, date: { on_or_before: to } })) },
       ],
     },
-    sorts: [{ property: "Due Date", direction: "ascending" }],
   });
   // Belt and braces: never return a hidden or internal task even if the filter changes.
+  // Notion's filter can't nest deep enough to pair each date's bounds, so it can
+  // match rows outside the range. The range is checked properly here.
   return pages
     .filter(onCalendar)
+    .sort((a, b) => Date.parse(calendarDate(a)!.start) - Date.parse(calendarDate(b)!.start))
     .map(toLaunchItem)
-    .filter((item) => item.title && (item.end ?? item.start) >= from);
+    .filter((item) => item.title && item.start <= to && (item.end ?? item.start) >= from);
 }
 
 /** One milestone or event, or null if the page isn't one a client may see. */
@@ -575,20 +579,6 @@ export async function getLaunchItemPage(id: string): Promise<(LaunchTask & { cli
   } catch {
     return null;
   }
-}
-
-/** Ticks Client Approved with who and when, or clears all three when `by` is null. */
-export async function setApprovalInNotion(id: string, by: string | null): Promise<void> {
-  await notion(`/pages/${id}`, {
-    method: "PATCH",
-    body: {
-      properties: {
-        "Client Approved": { checkbox: by !== null },
-        "Approved by": { rich_text: by ? [{ type: "text", text: { content: by.slice(0, 200) } }] : [] },
-        "Approved on": { date: by ? { start: new Date().toISOString() } : null },
-      },
-    },
-  });
 }
 
 /** Ticks or clears Posted. */

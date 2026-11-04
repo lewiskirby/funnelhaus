@@ -9,7 +9,7 @@ import { Icon } from "@/components/ui";
 import { formatDay } from "@/lib/calendar";
 import type { ContentBlock, RichText } from "@/lib/types";
 import { openCalendarItem, type CalendarItemResult } from "./actions";
-import { ApprovalBar, MilestoneEditor } from "./milestone";
+import { MilestoneEditor, PostedBar } from "./milestone";
 
 const dialogClass =
   "mx-0 mb-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-y-auto overscroll-contain rounded-t-3xl bg-card p-0 text-body shadow-2xl transition duration-200 ease-out backdrop:bg-ink/40 starting:translate-y-full sm:m-auto sm:max-w-xl sm:rounded-3xl sm:starting:translate-y-2 sm:starting:opacity-0";
@@ -33,7 +33,7 @@ export function CalendarItems({ children }: { children: ReactNode }) {
     load(id, current);
   }
 
-  /** Fetches the item again after an approval or edit, keeping the pop-up open, and recolours the calendar behind it. */
+  /** Fetches the item again after marking as posted or an edit, keeping the pop-up open, and recolours the calendar behind it. */
   function reload() {
     if (opened) load(opened.id, opened.session);
     router.refresh();
@@ -140,7 +140,7 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
         </div>
       ) : "error" in result ? (
         <p className="rounded-xl bg-brand-soft px-4 py-3 text-[14px] text-brand">{result.error}</p>
-      ) : item?.milestone && editing && !item.approved ? (
+      ) : item?.milestone && editing && !item.posted ? (
         <MilestoneEditor
           id={item.id}
           onCancel={() => setEditing(false)}
@@ -158,7 +158,7 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
             <div className="rounded-2xl p-4 ring-1 ring-line sm:p-5">
               {/* Floated so the text wraps around the icons instead of running under them. */}
               <div className="float-right -mt-1.5 -mr-1.5 ml-3 flex items-center gap-0.5">
-                {item?.milestone && !item.approved && (
+                {item?.milestone && !item.posted && (
                   <IconButton label="Edit" onClick={() => setEditing(true)}>
                     <Icon.pencil className="size-[18px]" />
                   </IconButton>
@@ -171,7 +171,7 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
         </div>
       )}
 
-      {item?.milestone && !editing && <ApprovalBar item={item} onEdit={() => setEditing(true)} onChanged={onChanged} />}
+      {item?.milestone && !editing && <PostedBar item={item} onEdit={() => setEditing(true)} onChanged={onChanged} />}
     </div>
   );
 }
