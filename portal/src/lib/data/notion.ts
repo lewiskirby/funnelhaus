@@ -330,12 +330,18 @@ export async function setTaskResponseInNotion(taskId: string, response: string):
 
 // ── Events ──────────────────────────────────────────
 // Events are Project Management Tracker rows with Event ticked. Fields used:
-// Task (title), Client, Due Date, Client links, and Milestone (a milestone
-// can't be changed from the portal). Notion keeps a time zone we send, but its
+// Task (title), Client, Due Date (Posting Date for a milestone that has one),
+// Client links, and Milestone (a milestone can't be changed from the portal). Notion keeps a time zone we send, but its
 // API only returns the UTC offset (e.g. 19:00-04:00), which is enough to show it.
 
 const ticked = (page: Page, name: string) => Boolean(page.properties[name]?.checkbox);
 const inTracker = (page: Page) => !page.in_trash && !page.archived && normalise(page.parent?.data_source_id ?? "") === normalise(TRACKER_DS);
+
+// Milestones sit on their Posting Date, or their Due Date until one is set.
+// Other events stay on Due Date, the date the portal edits.
+const CALENDAR_DATES = ["Posting Date", "Due Date"];
+const calendarDate = (page: Page) =>
+  (ticked(page, "Milestone") ? page.properties["Posting Date"]?.date : null) ?? page.properties["Due Date"]?.date;
 
 /** This client's events from `from` (default today) up to `until` if given, soonest first. */
 export async function queryClientEvents(
@@ -348,16 +354,21 @@ export async function queryClientEvents(
         { property: "Client", relation: { contains: clientId } },
         { property: "Event", checkbox: { equals: true } },
         { property: "Hide from client", checkbox: { equals: false } },
-        { property: "Due Date", date: { on_or_after: from } },
-        ...(until ? [{ property: "Due Date", date: { on_or_before: until } }] : []),
+        { or: CALENDAR_DATES.map((property) => ({ property, date: { on_or_after: from } })) },
+        ...(until ? [{ or: CALENDAR_DATES.map((property) => ({ property, date: { on_or_before: until } })) }] : []),
       ],
     },
-    sorts: [{ property: "Due Date", direction: "ascending" }],
   });
+  // A row can match on one date but sit on the other, so the range is checked properly here.
+  const inRange = (page: Page) => {
+    const date = calendarDate(page);
+    return Boolean(date?.start) && (date!.end ?? date!.start).slice(0, 10) >= from && (!until || date!.start.slice(0, 10) <= until);
+  };
   return pages
-    .filter((page) => ticked(page, "Event") && !ticked(page, "Hide from client") && page.properties["Due Date"]?.date?.start)
+    .filter((page) => ticked(page, "Event") && !ticked(page, "Hide from client") && inRange(page))
+    .sort((a, b) => Date.parse(calendarDate(a)!.start) - Date.parse(calendarDate(b)!.start))
     .map((page) => {
-      const date = page.properties["Due Date"]!.date!;
+      const date = calendarDate(page)!;
       return {
         id: page.id,
         name: text(page.properties["Task"]) || "Event",
@@ -512,12 +523,7 @@ export async function queryUpcomingWork(clientId: string, days: number): Promise
 }
 
 // The launch calendar shows only tracker rows with Milestone or Event ticked.
-// Milestones sit on their Posting Date, or their Due Date until one is set.
-// Other events stay on Due Date, the date the portal edits and Home shows.
 const TIMED_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})[\d:.]*(Z|[+-]\d{2}:\d{2})$/;
-const CALENDAR_DATES = ["Posting Date", "Due Date"];
-const calendarDate = (page: Page) =>
-  (ticked(page, "Milestone") ? page.properties["Posting Date"]?.date : null) ?? page.properties["Due Date"]?.date;
 const onCalendar = (page: Page) =>
   inTracker(page) && !ticked(page, "Hide from client") && (ticked(page, "Milestone") || ticked(page, "Event")) && Boolean(calendarDate(page)?.start);
 
