@@ -55,7 +55,8 @@ export default async function ResultsPage() {
           registrants={data.registrants}
           tracksVip={data.tracksVip}
           tracksCalls={data.tracksCalls}
-          spend={spend}
+          spend={spend && spend !== "error" ? spend.rows : spend}
+          currency={spend && spend !== "error" ? spend.currency : "USD"}
           webinars={[...webinars.values()]}
           fetchedAt={data.fetchedAt}
           ghlUrl={ghlUrl}

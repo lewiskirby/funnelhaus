@@ -49,13 +49,16 @@ type Filters = Record<Dimension, string>;
 const NO_FILTERS: Filters = { source: "", ad: "", content: "", lastTouch: "", tracking: "" };
 
 const nameKey = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
-const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n >= 1000 ? 0 : 2 });
+/** "$1,234" or "€12.50": the symbol alone, and no cents from 1,000 up. */
+const formatMoney = (n: number, currency: string) =>
+  n.toLocaleString("en-US", { style: "currency", currency, currencyDisplay: "narrowSymbol", maximumFractionDigits: n >= 1000 ? 0 : 2 });
 
 export function RegistrantsDashboard({
   registrants,
   tracksVip,
   tracksCalls,
   spend,
+  currency,
   webinars: known,
   ghlUrl,
   fetchedAt,
@@ -63,7 +66,8 @@ export function RegistrantsDashboard({
   registrants: Registrant[];
   tracksVip: boolean; // the client has a "VIP Ticket Purchased" field in GHL
   tracksCalls: boolean; // the client has an "Appointment Booked Date" field in GHL
-  spend: SpendRow[] | "error" | null; // Meta spend in USD per ad and day; null if no ad account is connected
+  spend: SpendRow[] | "error" | null; // Meta spend per ad and day in `currency`; null if no ad account is connected
+  currency: string; // e.g. "USD" or "EUR"
   webinars: { key: string; label: string }[]; // tagged in GHL or on the calendar, including upcoming ones
   ghlUrl: string;
   fetchedAt: number;
@@ -187,7 +191,7 @@ export function RegistrantsDashboard({
   }
   const spent =
     spend && spend !== "error" && !unattributable
-      ? rows.reduce((sum, r) => (spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.usd : sum), 0)
+      ? rows.reduce((sum, r) => (spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.amount : sum), 0)
       : null;
   const adFilter = filters.ad || (filters.content && ads.has(nameKey(filters.content)) ? filters.content : "");
   const spendHint =
@@ -198,9 +202,10 @@ export function RegistrantsDashboard({
         : adFilter
           ? `Spent on ${adFilter}`
           : webinar === "all"
-            ? "Meta ads, in USD"
+            ? `Meta ads, in ${currency}`
             : "Meta ads since the last webinar";
-  const costPer = (count: number) => (spent === null ? "—" : count ? usd(spent / count) : "—");
+  const fmt = (n: number) => formatMoney(n, currency);
+  const costPer = (count: number) => (spent === null ? "—" : count ? fmt(spent / count) : "—");
 
   // Spend per breakdown row: the ad's (Ad or Content) or the campaign's (Source or Content), within the
   // same days and filters as the tiles. Rows with no spend behind them (Instagram...) show a dash.
@@ -214,7 +219,7 @@ export function RegistrantsDashboard({
           ? (r: SpendRow) => nameKey(r.campaign) === key
           : null;
     if (!match) return null;
-    return rows.reduce((sum, r) => (match(r) && spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.usd : sum), 0);
+    return rows.reduce((sum, r) => (match(r) && spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.amount : sum), 0);
   };
   const showSpend = !!spend && (dimension === "ad" || dimension === "source" || dimension === "content");
   // Ads that spent in this view but brought no registrants still get a row, after the rest.
@@ -301,7 +306,7 @@ export function RegistrantsDashboard({
         <>
           <section className="card divide-y divide-line px-5 sm:px-6">
             <MetricRow label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} />
-            {spend && <MetricRow label="Ad spend" value={spent === null ? "—" : usd(spent)} hint={spendHint} />}
+            {spend && <MetricRow label="Ad spend" value={spent === null ? "—" : fmt(spent)} hint={spendHint} />}
             {spend && <MetricRow label="Cost per registrant" value={costPer(fromAds)} hint={`Ad spend ÷ ${fromAds.toLocaleString("en-GB")} from ads`} />}
             {tracksVip && <MetricRow label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
             {tracksVip && <MetricRow label="VIP uptake" value={uptake(vipPurchases, shown.length)} hint="VIP purchases ÷ registrants" />}
@@ -358,6 +363,7 @@ export function RegistrantsDashboard({
               selected={filters[dimension]}
               onSelect={toggleSlice}
               money={money}
+              currency={currency}
               showSpend={showSpend}
               showVip={tracksVip}
             />
@@ -506,6 +512,7 @@ function BreakdownTable({
   selected,
   onSelect,
   money,
+  currency,
   showSpend,
   showVip,
 }: {
@@ -514,10 +521,11 @@ function BreakdownTable({
   selected: string;
   onSelect: (label: string) => void;
   money: Record<string, Money>;
+  currency: string;
   showSpend: boolean;
   showVip: boolean;
 }) {
-  const cost = (m: Money | undefined, count: number | undefined) => (m?.spend == null || !count ? "—" : usd(m.spend / count));
+  const cost = (m: Money | undefined, count: number | undefined) => (m?.spend == null || !count ? "—" : formatMoney(m.spend / count, currency));
   const th = "pb-2 pl-3 text-right font-semibold whitespace-nowrap";
   const td = "py-2.5 pl-3 text-right tabular-nums whitespace-nowrap";
   return (
@@ -554,7 +562,7 @@ function BreakdownTable({
                 </td>
                 <td className={`${td} font-semibold text-ink`}>{s.count.toLocaleString("en-GB")}</td>
                 <td className={`${td} text-muted`}>{pct(s.count, total)}</td>
-                {showSpend && <td className={`${td} text-ink`}>{m?.spend == null ? "—" : usd(m.spend)}</td>}
+                {showSpend && <td className={`${td} text-ink`}>{m?.spend == null ? "—" : formatMoney(m.spend, currency)}</td>}
                 {showSpend && <td className={`${td} text-ink`}>{cost(m, m?.fromAds)}</td>}
                 {showVip && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.vips ?? 0).toLocaleString("en-GB")}</td>}
                 {showVip && <td className={`${td} text-muted`}>{s.label === OTHER ? "—" : uptake(m?.vips ?? 0, s.count)}</td>}

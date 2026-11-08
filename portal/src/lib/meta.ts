@@ -1,8 +1,9 @@
-// Reads a client's daily Meta ad spend per ad, converted to US dollars. Server-only: the token
+// Reads a client's daily Meta ad spend per ad, in the client's currency. Server-only: the token
 // never reaches the browser, and only campaign and ad names with a total per day leave the server.
 //
 // META_CLIENTS (env) maps a Notion client id to its ad account:
-//   {"<notion client id>": {"adAccountId": "407837286889537", "campaigns": ["[Webinar] Purchase Campaign"]}}
+//   {"<notion client id>": {"adAccountId": "407837286889537", "campaigns": ["[Webinar] Purchase Campaign"], "currency": "USD"}}
+// Spend is shown in the ad account's own currency unless "currency" names another one to convert to.
 // The token is META_ACCESS_TOKEN (a Business Manager system user token with ads_read on every
 // listed account); an account can carry its own "token" instead.
 // Only campaigns whose name exactly matches one in `campaigns` count (ad accounts can be shared
@@ -12,7 +13,7 @@
 import "server-only";
 import type { SpendRow } from "@/lib/types";
 
-type Account = { adAccountId: string; token?: string; campaigns: string[] };
+type Account = { adAccountId: string; token?: string; campaigns: string[]; currency?: string };
 
 const GRAPH = "https://graph.facebook.com/v24.0";
 const FX = "https://api.frankfurter.dev/v1";
@@ -54,10 +55,20 @@ async function graphList<T>(url: URL): Promise<T[]> {
   return items;
 }
 
+const actPath = (account: Account) => `${GRAPH}/act_${account.adAccountId.replace(/^act_/, "")}`;
+
+/** The ad account's own currency, e.g. "EUR". */
+async function accountCurrency(account: Account, token: string): Promise<string> {
+  const url = new URL(actPath(account));
+  url.searchParams.set("fields", "currency");
+  url.searchParams.set("access_token", token);
+  return (await graph<{ currency: string }>(url)).currency;
+}
+
 async function fetchRows(account: Account, token: string): Promise<Row[]> {
   // Find the client's campaigns by exact name first, then ask only for their ads: daily spend
   // for every ad in a shared account since it opened is more than Meta will answer in one go.
-  const list = new URL(`${GRAPH}/act_${account.adAccountId.replace(/^act_/, "")}/campaigns`);
+  const list = new URL(`${actPath(account)}/campaigns`);
   list.searchParams.set("fields", "id,name");
   list.searchParams.set("limit", "500");
   list.searchParams.set("access_token", token);
@@ -81,45 +92,49 @@ async function fetchRows(account: Account, token: string): Promise<Row[]> {
   return rows.sort((a, b) => a.day.localeCompare(b.day));
 }
 
-/** ECB rates to USD per working day, from a week before `since` so the first days have a rate to fall back on. */
-async function usdRates(currency: string, since: string, until: string): Promise<[string, number][]> {
+/** ECB rates from one currency to another per working day, from a week before `since` so the first days have a rate to fall back on. */
+async function fxRates(from: string, to: string, since: string, until: string): Promise<[string, number][]> {
   const start = new Date(Date.parse(`${since}T12:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10);
-  const res = await fetch(`${FX}/${start}..${until}?from=${currency}&to=USD`, { next: { revalidate: 3600 } });
+  const res = await fetch(`${FX}/${start}..${until}?from=${from}&to=${to}`, { next: { revalidate: 3600 } });
   if (!res.ok) {
     console.error(`Exchange rates failed: ${res.status} ${await res.text()}`);
     throw new Error("Exchange rates failed");
   }
-  const { rates } = (await res.json()) as { rates: Record<string, { USD: number }> };
+  const { rates } = (await res.json()) as { rates: Record<string, Record<string, number>> };
   return Object.entries(rates)
-    .map(([day, r]): [string, number] => [day, r.USD])
+    .map(([day, r]): [string, number] => [day, r[to]])
     .sort(([a], [b]) => a.localeCompare(b));
 }
 
-/** Spend per ad per ad-account day in USD. Weekends and holidays use the last working day's rate. */
-async function fetchSpend(account: Account): Promise<SpendRow[]> {
+export type Spend = { currency: string; rows: SpendRow[] };
+
+/** Spend per ad per ad-account day in the client's currency. Weekends and holidays use the last working day's rate. */
+async function fetchSpend(account: Account): Promise<Spend> {
   const token = account.token ?? process.env.META_ACCESS_TOKEN;
   if (!token) {
     console.error("No Meta token: set META_ACCESS_TOKEN");
     throw new Error("Meta not connected");
   }
-  const rows = await fetchRows(account, token);
-  if (!rows.length) return [];
+  const [rows, own] = await Promise.all([fetchRows(account, token), account.currency ? undefined : accountCurrency(account, token)]);
+  const target = (account.currency ?? own!).toUpperCase();
+  if (!rows.length) return { currency: target, rows: [] };
   const currency = rows[0].currency;
-  const rates = currency === "USD" ? [] : await usdRates(currency, rows[0].day, rows[rows.length - 1].day);
+  const rates = currency === target ? [] : await fxRates(currency, target, rows[0].day, rows[rows.length - 1].day);
   const rateOn = (day: string) => {
-    if (currency === "USD") return 1;
+    if (currency === target) return 1;
     let rate: number | undefined;
     for (const [d, r] of rates) if (d <= day) rate = r;
     if (rate === undefined) throw new Error(`No exchange rate on or before ${day}`);
     return rate;
   };
-  return rows.map((r) => ({ day: r.day, campaign: r.campaign, ad: r.ad, usd: Math.round(r.spend * rateOn(r.day) * 100) / 100 }));
+  const converted = rows.map((r) => ({ day: r.day, campaign: r.campaign, ad: r.ad, amount: Math.round(r.spend * rateOn(r.day) * 100) / 100 }));
+  return { currency: target, rows: converted };
 }
 
-const cache = new Map<string, { at: number; result: Promise<SpendRow[]> }>();
+const cache = new Map<string, { at: number; result: Promise<Spend> }>();
 
-/** This client's Meta spend in USD per day and ad, or null if no ad account is connected. Cached for 15 minutes. */
-export async function getAdSpend(clientId: string): Promise<SpendRow[] | null> {
+/** This client's Meta spend per day and ad in their currency, or null if no ad account is connected. Cached for 15 minutes. */
+export async function getAdSpend(clientId: string): Promise<Spend | null> {
   const key = normalise(clientId);
   const account = accounts()[key];
   if (!account) return null;
