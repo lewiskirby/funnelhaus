@@ -166,7 +166,8 @@ export function RegistrantsDashboard({
 
   // Spend over the same days and filters as the registrants. A webinar's spend is every day after the
   // webinar before it, up to its own day. An Ad (or Content) filter narrows spend to that ad, and a Source
-  // filter to that campaign; filters with no spend behind them (Instagram, Last touch...) leave it blank.
+  // filter to that campaign (a Source of Meta or Facebook keeps all of it); filters with no spend
+  // behind them (Instagram, Last touch...) leave it blank.
   const after = webinars.reduce((prev, w) => (w.key < webinar && w.key > prev ? w.key : prev), "");
   const spendDay = (day: string) =>
     (webinar === "all" || (day > after && day <= webinar)) &&
@@ -181,6 +182,7 @@ export function RegistrantsDashboard({
     if (!value) continue;
     if ((key === "ad" || key === "content") && ads.has(value)) spendFilters.push((r) => nameKey(r.ad) === value);
     else if ((key === "source" || key === "content") && campaigns.has(value)) spendFilters.push((r) => nameKey(r.campaign) === value);
+    else if (key === "source" && (value === "meta" || value === "facebook")) continue;
     else unattributable = true;
   }
   const spent =

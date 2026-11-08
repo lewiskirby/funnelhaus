@@ -99,21 +99,24 @@ async function fieldIds(account: Account): Promise<Partial<Record<FieldKey, stri
   return Object.fromEntries(FIELD_KEYS.map((k) => [k, customFields.find((f) => f.fieldKey === `contact.${k}`)?.id]));
 }
 
-// Per-webinar tags look like "14-october-2026-webinar" or "1nov2026-registered" (not "14oct2026-attended").
+// Per-webinar tags look like "14-october-2026-webinar", "1nov2026-registered" or "2026-11-10-registered" (not "14oct2026-attended").
 const WEBINAR_TAGS = [/^(\d{1,2})-([a-z]+)-(\d{4})-webinar$/, /^(\d{1,2})([a-z]+)(\d{4})-registered$/];
+const NUMERIC_WEBINAR_TAG = /^(\d{4})-(\d{2})-(\d{2})-registered$/;
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const capital = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
-/** "14-october-2026-webinar" or "14oct2026-registered" → { key: "2026-10-14", label: "14 October 2026" }. */
+/** "14-october-2026-webinar", "14oct2026-registered" or "2026-10-14-registered" → { key: "2026-10-14", label: "14 October 2026" }. */
 function webinarOf(tag: string): { key: string; label: string } | null {
   const name = tag.trim().toLowerCase();
-  const m = WEBINAR_TAGS.map((re) => re.exec(name)).find(Boolean);
+  const numeric = NUMERIC_WEBINAR_TAG.exec(name);
+  const m = numeric ?? WEBINAR_TAGS.map((re) => re.exec(name)).find(Boolean);
   if (!m) return null;
-  const month = MONTHS.findIndex((mo) => m[2].length >= 3 && mo.startsWith(m[2]));
-  const day = Number(m[1]);
-  const date = new Date(Date.UTC(Number(m[3]), month, day, 12));
+  const month = numeric ? Number(numeric[2]) - 1 : MONTHS.findIndex((mo) => m[2].length >= 3 && mo.startsWith(m[2]));
+  const day = Number(numeric ? numeric[3] : m[1]);
+  const year = numeric ? numeric[1] : m[3];
+  const date = new Date(Date.UTC(Number(year), month, day, 12));
   if (month < 0 || date.getUTCDate() !== day) return null;
-  return { key: date.toISOString().slice(0, 10), label: `${day} ${capital(MONTHS[month])} ${m[3]}` };
+  return { key: date.toISOString().slice(0, 10), label: `${day} ${capital(MONTHS[month])} ${year}` };
 }
 
 const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
@@ -124,6 +127,7 @@ const SOURCE_NAMES: Record<string, string> = {
   instagram: "Instagram",
   fb: "Facebook",
   facebook: "Facebook",
+  meta: "Meta",
   yt: "YouTube",
   youtube: "YouTube",
   skool: "Skool",
@@ -208,7 +212,8 @@ async function fetchRegistrants(account: Account): Promise<{ registrants: Regist
     const s = source ? paidShare.get(source) : undefined;
     return !!s && !PLATFORMS.has(source!.toLowerCase()) && s.paid * 2 > s.tagged;
   };
-  // Paid UTMs only carry the Meta ad id; name it after what Trakyo called that ad for other people.
+  // Paid UTMs carry either the Meta ad id (named after what Trakyo called that ad for other people)
+  // or, where the ads use {{ad.name}}, the ad's own name, which is used as it is.
   const namesById = new Map<string, string[]>();
   for (const { utm, trakyo } of rows) {
     if (!utm.content || !trakyo.content || !isAdCampaign(trakyo.source)) continue;
@@ -218,7 +223,9 @@ async function fetchRegistrants(account: Account): Promise<{ registrants: Regist
     if (isAdCampaign(trakyo.source)) return trakyo.content ?? "Unnamed ad";
     if (!utm.medium || !PAID.test(utm.medium)) return undefined;
     const name = utm.content ? mostCommon(namesById.get(utm.content) ?? []) : undefined;
-    return name ?? (utm.content ? `Ad ${utm.content}` : "Unnamed ad");
+    if (name) return name;
+    if (!utm.content) return "Unnamed ad";
+    return /^\d+$/.test(utm.content) ? `Ad ${utm.content}` : utm.content;
   };
 
   // "VIP Ticket Purchased" is set to Yes when someone buys the VIP upgrade; clients without the field have no VIP numbers.
