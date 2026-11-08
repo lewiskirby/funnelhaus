@@ -506,6 +506,8 @@ function Donut({ slices, total, selected, onSelect }: { slices: Slice[]; total: 
  * Every slice as a row: colour, name, count and share, plus spend, VIP purchases and both costs where
  * there's spend behind the dimension. Doubles as the chart's legend and table view.
  */
+type SortKey = "label" | "count" | "spend" | "costReg" | "vips" | "vipRate" | "costVip";
+
 function BreakdownTable({
   slices,
   total,
@@ -526,25 +528,73 @@ function BreakdownTable({
   showVip: boolean;
 }) {
   const cost = (m: Money | undefined, count: number | undefined) => (m?.spend == null || !count ? "—" : formatMoney(m.spend / count, currency));
-  const th = "pb-2 pl-3 text-right font-semibold whitespace-nowrap";
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
+  // Click a heading to sort by it (biggest first, A to Z for Value), again to flip, a third time to go back.
+  const sortBy = (key: SortKey) =>
+    setSort((cur) => {
+      const first = key === "label" ? "asc" : "desc";
+      if (cur?.key !== key) return { key, dir: first };
+      return cur.dir === first ? { key, dir: first === "asc" ? "desc" : "asc" } : null;
+    });
+  const valueOf = (s: Slice, key: SortKey): number | string | null => {
+    const m = money[s.label];
+    const per = (count: number | undefined) => (m?.spend == null || !count ? null : m.spend / count);
+    switch (key) {
+      case "label": return s.label;
+      case "count": return s.count;
+      case "spend": return m?.spend ?? null;
+      case "costReg": return per(m?.fromAds);
+      case "vips": return s.label === OTHER ? null : (m?.vips ?? 0);
+      case "vipRate": return s.label === OTHER || !s.count ? null : (m?.vips ?? 0) / s.count;
+      case "costVip": return per(m?.vipsFromAds);
+    }
+  };
+  const rows = !sort
+    ? slices
+    : [...slices].sort((a, b) => {
+        // "Other" and rows with no value (a dash) stay at the bottom either way.
+        const pin = Number(a.label === OTHER) - Number(b.label === OTHER);
+        if (pin) return pin;
+        const va = valueOf(a, sort.key);
+        const vb = valueOf(b, sort.key);
+        if (va === null || vb === null) return Number(va === null) - Number(vb === null);
+        const d = typeof va === "string" ? va.localeCompare(String(vb)) : va - (vb as number);
+        return (sort.dir === "asc" ? d : -d) || b.count - a.count || a.label.localeCompare(b.label);
+      });
+  const heading = (k: SortKey, label: string, className = "") => {
+    const on = sort?.key === k;
+    const right = k !== "label";
+    return (
+      <th key={label} aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"} className={`pb-2 font-semibold whitespace-nowrap ${right ? "pl-3 text-right" : ""} ${className}`}>
+        <button
+          type="button"
+          onClick={() => sortBy(k)}
+          className={`inline-flex items-center gap-1 transition hover:text-ink ${on ? "text-ink" : ""} ${right ? "flex-row-reverse" : ""}`}
+        >
+          {label}
+          <span aria-hidden className={`text-[10px] ${on ? "" : "invisible"}`}>{on && sort.dir === "asc" ? "▲" : "▼"}</span>
+        </button>
+      </th>
+    );
+  };
   const td = "py-2.5 pl-3 text-right tabular-nums whitespace-nowrap";
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[14px]">
         <thead>
           <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
-            <th className="pb-2 font-semibold">Value</th>
-            <th className={th}>Registrants</th>
-            <th className={`w-16 ${th}`}>Share</th>
-            {showSpend && <th className={th}>Spend</th>}
-            {showSpend && <th className={th}>Cost / reg</th>}
-            {showVip && <th className={th}>VIP</th>}
-            {showVip && <th className={th}>VIP %</th>}
-            {showSpend && showVip && <th className={th}>Cost / VIP</th>}
+            {heading("label", "Value")}
+            {heading("count", "Registrants")}
+            {heading("count", "Share", "w-16")}
+            {showSpend && heading("spend", "Spend")}
+            {showSpend && heading("costReg", "Cost / reg")}
+            {showVip && heading("vips", "VIP")}
+            {showVip && heading("vipRate", "VIP %")}
+            {showSpend && showVip && heading("costVip", "Cost / VIP")}
           </tr>
         </thead>
         <tbody>
-          {slices.map((s) => {
+          {rows.map((s) => {
             const clickable = s.label !== OTHER;
             const isSelected = selected === s.label;
             const m = money[s.label];
