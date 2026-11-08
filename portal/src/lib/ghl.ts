@@ -219,9 +219,11 @@ async function fetchRegistrants(account: Account): Promise<{ registrants: Regist
     if (!utm.content || !trakyo.content || !isAdCampaign(trakyo.source)) continue;
     namesById.set(utm.content, [...(namesById.get(utm.content) ?? []), trakyo.content]);
   }
+  // Only people whose UTM medium is paid count as coming from an ad, so cost per registrant never
+  // counts anyone the ads didn't bring in. Trakyo still names the ad when it knows it.
   const adOf = ({ utm, trakyo }: (typeof rows)[number]) => {
-    if (isAdCampaign(trakyo.source)) return trakyo.content ?? "Unnamed ad";
     if (!utm.medium || !PAID.test(utm.medium)) return undefined;
+    if (isAdCampaign(trakyo.source)) return trakyo.content ?? "Unnamed ad";
     const name = utm.content ? mostCommon(namesById.get(utm.content) ?? []) : undefined;
     if (name) return name;
     if (!utm.content) return "Unnamed ad";
