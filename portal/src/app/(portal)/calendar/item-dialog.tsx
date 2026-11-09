@@ -6,6 +6,7 @@ import { CopyLink, readLinks } from "@/components/event-row";
 import { NotionContent } from "@/components/notion-content";
 import { plain } from "@/components/rich-text";
 import { Icon } from "@/components/ui";
+import { GuideUnavailable, WebinarGuide } from "@/components/webinar-guide";
 import { formatDay } from "@/lib/calendar";
 import type { ContentBlock, RichText } from "@/lib/types";
 import { openCalendarItem, type CalendarItemResult } from "./actions";
@@ -87,6 +88,7 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
   const result = opened.result;
   const item = result && "item" in result ? result.item : null;
   const blocks = result && "blocks" in result ? result.blocks : [];
+  const guide = result && "guide" in result ? result.guide : undefined;
   const links = item?.links?.length ? readLinks(item.links) : [];
   const hasLinks = links.some((l) => l.links.length || l.notes.length);
   const empty = item !== null && blocks.length === 0 && !hasLinks;
@@ -131,6 +133,12 @@ function ItemSheet({ opened, onClose, onChanged }: { opened: Opened; onClose: ()
           ×
         </button>
       </div>
+
+      {guide && !editing && (
+        <div className="mb-5">
+          <WebinarGuide>{guide.length > 0 ? <NotionContent blocks={guide} /> : <GuideUnavailable />}</WebinarGuide>
+        </div>
+      )}
 
       {!result ? (
         <div className="space-y-3" aria-label="Loading">

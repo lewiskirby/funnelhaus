@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { removeEvent, saveEvent } from "@/app/(portal)/actions";
 import { EventRow } from "@/components/event-row";
+import { WebinarGuide } from "@/components/webinar-guide";
+import { isWebinar } from "@/lib/calendar";
 import type { ClientEvent } from "@/lib/types";
 
 // Offered in the time zone picker, alongside the viewer's own zone and the event's saved one.
@@ -102,8 +104,8 @@ const dialogClass =
 
 type Sheet = { event?: ClientEvent; session: number };
 
-/** The "Coming up" list: tap an event to edit or delete it, or add a new one. */
-export function Events({ events, maxName }: { events: ClientEvent[]; maxName: number }) {
+/** The "Coming up" list: tap an event to edit or delete it, or add a new one. Webinars link to `guide`. */
+export function Events({ events, maxName, guide }: { events: ClientEvent[]; maxName: number; guide?: ReactNode }) {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const session = useRef(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -130,7 +132,12 @@ export function Events({ events, maxName }: { events: ClientEvent[]; maxName: nu
       ) : (
         <ol className="space-y-3">
           {events.map((e) => (
-            <EventRow key={e.id} event={e} onEdit={e.editable ? () => open(e) : undefined} />
+            <EventRow
+              key={e.id}
+              event={e}
+              onEdit={e.editable ? () => open(e) : undefined}
+              extra={guide && isWebinar(e.name) ? <WebinarGuide compact>{guide}</WebinarGuide> : undefined}
+            />
           ))}
         </ol>
       )}

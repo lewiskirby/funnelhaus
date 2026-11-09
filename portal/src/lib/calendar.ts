@@ -49,3 +49,6 @@ export function monthGrid(month: string): string[] {
 
 export const formatDay = (day: string, opts: Intl.DateTimeFormatOptions) =>
   asDate(day).toLocaleDateString("en-GB", { timeZone: "UTC", ...opts });
+
+/** True for an event that's a webinar ("Webinar", "VIP webinar"…). These get the Webinar presenting guide. */
+export const isWebinar = (name: string) => /webinar/i.test(name);

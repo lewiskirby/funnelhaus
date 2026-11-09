@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { offsetLabel } from "@/lib/calendar";
 import type { ClientEvent, RichText } from "@/lib/types";
 
@@ -164,8 +164,11 @@ function EventLinks({ rich, className }: { rich: RichText[]; className: string }
   );
 }
 
-/** One upcoming event. With `onEdit`, the date and name open it for editing; links are copied, not opened. */
-export function EventRow({ event, onEdit }: { event: ClientEvent; onEdit?: () => void }) {
+/**
+ * One upcoming event. With `onEdit`, the date and name open it for editing; links are copied, not opened.
+ * `extra` sits under the links, e.g. the Webinar presenting guide on a webinar.
+ */
+export function EventRow({ event, onEdit, extra }: { event: ClientEvent; onEdit?: () => void; extra?: ReactNode }) {
   // Server render uses Berlin; the browser swaps in the viewer's own time zone.
   const viewerZone = useSyncExternalStore(
     noopSubscribe,
@@ -198,6 +201,7 @@ export function EventRow({ event, onEdit }: { event: ClientEvent; onEdit?: () =>
       <li>
         <div className="flex items-center gap-4">{body}</div>
         {links && <EventLinks rich={links} className="pl-16" />}
+        {extra && <div className="mt-2 pl-16">{extra}</div>}
       </li>
     );
   }
@@ -213,6 +217,7 @@ export function EventRow({ event, onEdit }: { event: ClientEvent; onEdit?: () =>
         <span className="shrink-0 text-[12.5px] font-medium text-faint transition group-hover:text-brand">Edit</span>
       </button>
       {links && <EventLinks rich={links} className="pr-2 pl-18" />}
+      {extra && <div className="mt-2 pr-2 pl-18">{extra}</div>}
     </li>
   );
 }

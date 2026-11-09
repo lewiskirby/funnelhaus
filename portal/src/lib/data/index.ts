@@ -6,6 +6,7 @@
 import "server-only";
 import { cache } from "react";
 import * as notion from "./notion";
+import { isWebinar } from "@/lib/calendar";
 import { sendPortalEmail } from "@/lib/email";
 import { ANSWER_MAX, BLOCK_TEXT_MAX } from "@/lib/limits";
 import type { AdCreative, AdStage, BlockEdits, Client, ClientEvent, ContentBlock, EditableBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
@@ -530,16 +531,19 @@ function withoutRowIds(blocks: ContentBlock[]): ContentBlock[] {
 }
 
 /** A milestone or event and its page content, if it's on this client's calendar. Empty content means TBC. */
-export async function getCalendarItem(clientId: string, id: string): Promise<{ item: LaunchTask; blocks: ContentBlock[] } | null> {
+export async function getCalendarItem(
+  clientId: string,
+  id: string,
+): Promise<{ item: LaunchTask; blocks: ContentBlock[]; guide?: ContentBlock[] } | null> {
   const item = await notion.getLaunchItemPage(id);
   if (!item || !ownedBy(clientId)(item)) return null;
-  let blocks: ContentBlock[] = [];
-  try {
-    blocks = withoutRowIds(await notion.getPageContent(id, { fresh: true }));
-  } catch {
+  const webinar = item.event && isWebinar(item.title);
+  const [blocks, guide] = await Promise.all([
     // Show the item as TBC rather than failing.
-  }
-  return { item: withoutClients(item), blocks };
+    notion.getPageContent(id, { fresh: true }).then(withoutRowIds, () => [] as ContentBlock[]),
+    webinar ? getWebinarGuide() : undefined,
+  ]);
+  return { item: withoutClients(item), blocks, ...(webinar && { guide }) };
 }
 
 // ── Milestone posting and edits ─────────────
@@ -642,6 +646,20 @@ const FILMING_GUIDE_PAGE = process.env.NOTION_FILMING_GUIDE_PAGE ?? "3ff04bbf-db
 export async function getFilmingGuide(): Promise<ContentBlock[]> {
   try {
     return await notion.getPageContent(FILMING_GUIDE_PAGE);
+  } catch {
+    return []; // Details are logged in notion.ts.
+  }
+}
+
+// ── Webinar presenting guide ────────────────────────
+// A client-facing SOP page in Notion, shown on every webinar event (Home and the
+// Launch calendar). Read live, so edits in Notion show in the portal within a minute.
+
+const WEBINAR_GUIDE_PAGE = process.env.NOTION_WEBINAR_GUIDE_PAGE ?? "3f904bbf-db00-8025-8e42-c4e2f91d49cf";
+
+export async function getWebinarGuide(): Promise<ContentBlock[]> {
+  try {
+    return await notion.getPageContent(WEBINAR_GUIDE_PAGE);
   } catch {
     return []; // Details are logged in notion.ts.
   }

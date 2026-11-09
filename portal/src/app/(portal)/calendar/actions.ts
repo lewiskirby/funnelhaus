@@ -9,7 +9,8 @@ import {
 import { requireClient } from "@/lib/session";
 import type { BlockEdits, ContentBlock, EditableBlock, LaunchTask } from "@/lib/types";
 
-export type CalendarItemResult = { item: LaunchTask; blocks: ContentBlock[] } | { error: string };
+// `guide`: the Webinar presenting guide, on webinar events only.
+export type CalendarItemResult = { item: LaunchTask; blocks: ContentBlock[]; guide?: ContentBlock[] } | { error: string };
 type Result = { ok: true } | { ok: false; error: string };
 
 const validId = (id: unknown): id is string => typeof id === "string" && /^[0-9a-f-]{32,36}$/i.test(id);

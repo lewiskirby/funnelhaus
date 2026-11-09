@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { Events } from "@/components/events";
+import { NotionContent } from "@/components/notion-content";
+import { GuideUnavailable } from "@/components/webinar-guide";
 import { StatusToggle } from "@/components/task-status";
 import { Icon, ProgressBar, SectionHeading } from "@/components/ui";
-import { EVENT_NAME_MAX, getClientEvents, getClientTasks, getUpcomingWork } from "@/lib/data";
+import { isWebinar } from "@/lib/calendar";
+import { EVENT_NAME_MAX, getClientEvents, getClientTasks, getUpcomingWork, getWebinarGuide } from "@/lib/data";
 import { requireClient } from "@/lib/session";
 
 export default async function HomePage() {
@@ -18,6 +21,9 @@ export default async function HomePage() {
   const next = open.find((t) => t.status === "In Progress") ?? open[0];
   const shown = open.slice(0, 5);
   const upcoming = events.slice(0, 4);
+  // Every webinar coming up links to the Webinar presenting guide, read live from Notion.
+  const guideBlocks = upcoming.some((e) => isWebinar(e.name)) ? await getWebinarGuide() : null;
+  const guide = guideBlocks && (guideBlocks.length > 0 ? <NotionContent blocks={guideBlocks} /> : <GuideUnavailable />);
   const links = [
     { label: "Asset upload folder", hint: "Drop your images, videos and files here", url: client.assetFolderUrl, emoji: "📤" },
     { label: "Google Drive folder", hint: "Everything we create for you", url: client.driveFolderUrl, emoji: "📁" },
@@ -168,7 +174,7 @@ export default async function HomePage() {
 
         <section className="card p-6 lg:col-span-2">
           <SectionHeading title="Coming up" />
-          <Events events={upcoming} maxName={EVENT_NAME_MAX} />
+          <Events events={upcoming} maxName={EVENT_NAME_MAX} guide={guide ?? undefined} />
         </section>
       </div>
 
