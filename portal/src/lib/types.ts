@@ -119,7 +119,10 @@ export interface SpendRow {
   day: string; // YYYY-MM-DD
   campaign: string; // Meta campaign name, as Trakyo shows it for ad clicks
   ad: string; // Meta ad name, matching the registrants' Ad value
-  amount: number;
+  amount: number; // spend in the client's currency
+  impressions: number;
+  linkClicks: number; // Meta's inline link clicks
+  lpv: number; // landing page views
 }
 
 // Page content from Notion, reduced to what the portal renders.

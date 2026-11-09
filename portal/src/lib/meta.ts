@@ -1,5 +1,6 @@
-// Reads a client's daily Meta ad spend per ad, in the client's currency. Server-only: the token
-// never reaches the browser, and only campaign and ad names with a total per day leave the server.
+// Reads a client's daily Meta ad spend per ad, in the client's currency, with impressions, link clicks and
+// landing page views (counts only: conversions come from the portal's own registrants, not Meta). Server-only: the token
+// never reaches the browser, and only campaign and ad names with totals per day leave the server.
 //
 // META_CLIENTS (env) maps a Notion client id to its ad account:
 //   {"<notion client id>": {"adAccountId": "407837286889537", "campaigns": ["[Webinar] Purchase Campaign"], "currency": "USD"}}
@@ -31,7 +32,17 @@ function accounts(): Record<string, Account> {
   }
 }
 
-type Row = { day: string; campaign: string; ad: string; spend: number; currency: string };
+type Counts = { impressions: number; linkClicks: number; lpv: number };
+type Row = Counts & { day: string; campaign: string; ad: string; spend: number; currency: string };
+type Insight = {
+  date_start: string;
+  ad_name: string;
+  spend?: string;
+  impressions?: string;
+  inline_link_clicks?: string;
+  actions?: { action_type: string; value: string }[];
+  account_currency: string;
+};
 
 async function graph<T>(url: URL | string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
@@ -79,14 +90,18 @@ async function fetchRows(account: Account, token: string): Promise<Row[]> {
   for (const campaign of campaigns) {
     const url = new URL(`${GRAPH}/${campaign.id}/insights`);
     url.searchParams.set("level", "ad");
-    url.searchParams.set("fields", "ad_name,spend,account_currency");
+    url.searchParams.set("fields", "ad_name,spend,impressions,inline_link_clicks,actions,account_currency");
     url.searchParams.set("date_preset", "maximum");
     url.searchParams.set("time_increment", "1");
     url.searchParams.set("limit", "500");
     url.searchParams.set("access_token", token);
-    for (const r of await graphList<{ date_start: string; ad_name: string; spend?: string; account_currency: string }>(url)) {
+    for (const r of await graphList<Insight>(url)) {
       const spend = Number(r.spend ?? 0);
-      if (spend) rows.push({ day: r.date_start, campaign: campaign.name, ad: r.ad_name, spend, currency: r.account_currency });
+      const impressions = Number(r.impressions ?? 0);
+      const linkClicks = Number(r.inline_link_clicks ?? 0);
+      const lpv = Number(r.actions?.find((a) => a.action_type === "landing_page_view")?.value ?? 0);
+      if (spend || impressions || linkClicks || lpv)
+        rows.push({ day: r.date_start, campaign: campaign.name, ad: r.ad_name, spend, impressions, linkClicks, lpv, currency: r.account_currency });
     }
   }
   return rows.sort((a, b) => a.day.localeCompare(b.day));
@@ -127,7 +142,15 @@ async function fetchSpend(account: Account): Promise<Spend> {
     if (rate === undefined) throw new Error(`No exchange rate on or before ${day}`);
     return rate;
   };
-  const converted = rows.map((r) => ({ day: r.day, campaign: r.campaign, ad: r.ad, amount: Math.round(r.spend * rateOn(r.day) * 100) / 100 }));
+  const converted = rows.map((r) => ({
+    day: r.day,
+    campaign: r.campaign,
+    ad: r.ad,
+    amount: Math.round(r.spend * rateOn(r.day) * 100) / 100,
+    impressions: r.impressions,
+    linkClicks: r.linkClicks,
+    lpv: r.lpv,
+  }));
   return { currency: target, rows: converted };
 }
 

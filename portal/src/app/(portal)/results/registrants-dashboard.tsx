@@ -189,10 +189,8 @@ export function RegistrantsDashboard({
     else if (key === "source" && (value === "meta" || value === "facebook")) continue;
     else unattributable = true;
   }
-  const spent =
-    spend && spend !== "error" && !unattributable
-      ? rows.reduce((sum, r) => (spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.amount : sum), 0)
-      : null;
+  const totals = spend && spend !== "error" && !unattributable ? sumMeta(rows, (r) => spendDay(r.day) && spendFilters.every((f) => f(r))) : null;
+  const spent = totals?.amount ?? null;
   const adFilter = filters.ad || (filters.content && ads.has(nameKey(filters.content)) ? filters.content : "");
   const spendHint =
     spend === "error"
@@ -209,7 +207,7 @@ export function RegistrantsDashboard({
 
   // Spend per breakdown row: the ad's (Ad or Content) or the campaign's (Source or Content), within the
   // same days and filters as the tiles. Rows with no spend behind them (Instagram...) show a dash.
-  const spendFor = (label: string): number | null => {
+  const metaFor = (label: string): MetaTotals | null => {
     if (!spend || spend === "error" || unattributable) return null;
     const key = nameKey(label);
     const match =
@@ -219,7 +217,7 @@ export function RegistrantsDashboard({
           ? (r: SpendRow) => nameKey(r.campaign) === key
           : null;
     if (!match) return null;
-    return rows.reduce((sum, r) => (match(r) && spendDay(r.day) && spendFilters.every((f) => f(r)) ? sum + r.amount : sum), 0);
+    return sumMeta(rows, (r) => match(r) && spendDay(r.day) && spendFilters.every((f) => f(r)));
   };
   const showSpend = !!spend && (dimension === "ad" || dimension === "source" || dimension === "content");
   // Ads that spent in this view but brought no registrants still get a row, after the rest.
@@ -227,13 +225,13 @@ export function RegistrantsDashboard({
   const spendOnly: Slice[] =
     dimension === "ad" || dimension === "content"
       ? [...new Map(rows.map((r) => [nameKey(r.ad), r.ad])).values()]
-          .filter((ad) => !listed.has(nameKey(ad)) && (spendFor(ad) ?? 0) > 0)
-          .sort((a, b) => (spendFor(b) ?? 0) - (spendFor(a) ?? 0))
+          .filter((ad) => !listed.has(nameKey(ad)) && (metaFor(ad)?.amount ?? 0) > 0)
+          .sort((a, b) => (metaFor(b)?.amount ?? 0) - (metaFor(a)?.amount ?? 0))
           .map((ad) => ({ label: ad, count: 0, colour: MUTED }))
       : [];
   const tableSlices = [...slices, ...spendOnly];
   const money = Object.fromEntries(
-    tableSlices.map((sl) => [sl.label, { spend: sl.label === OTHER ? null : spendFor(sl.label), ...(byValue.get(sl.label) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 }) }]),
+    tableSlices.map((sl) => [sl.label, { meta: sl.label === OTHER ? null : metaFor(sl.label), ...(byValue.get(sl.label) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 }) }]),
   );
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
@@ -307,6 +305,16 @@ export function RegistrantsDashboard({
           <section className="card divide-y divide-line px-5 sm:px-6">
             <MetricRow label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} />
             {spend && <MetricRow label="Ad spend" value={spent === null ? "—" : fmt(spent)} hint={spendHint} />}
+            {spend && <MetricRow label="CPM" value={spent === null ? "—" : perThousand(totals!, currency)} hint="Ad spend per 1,000 impressions" />}
+            {spend && <MetricRow label="Link CTR" value={totals ? ratio(totals.linkClicks, totals.impressions, 2) : "—"} hint="Link clicks ÷ impressions" />}
+            {spend && <MetricRow label="Landing page views" value={totals ? totals.lpv : "—"} hint="From Meta" />}
+            {spend && (
+              <MetricRow
+                label="Landing page conversion"
+                value={totals ? ratio(fromAds, totals.lpv, 1) : "—"}
+                hint={`${fromAds.toLocaleString("en-GB")} registrants from ads ÷ landing page views`}
+              />
+            )}
             {spend && <MetricRow label="Cost per registrant" value={costPer(fromAds)} hint={`Ad spend ÷ ${fromAds.toLocaleString("en-GB")} from ads`} />}
             {tracksVip && <MetricRow label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
             {tracksVip && <MetricRow label="VIP uptake" value={uptake(vipPurchases, shown.length)} hint="VIP purchases ÷ registrants" />}
@@ -426,7 +434,19 @@ function Stat({ label, value, hint, accent = false }: { label: string; value: nu
 
 type Slice = { label: string; count: number; colour: string };
 type Counts = { fromAds: number; vips: number; vipsFromAds: number };
-type Money = Counts & { spend: number | null };
+type Money = Counts & { meta: MetaTotals | null };
+type MetaTotals = { amount: number; impressions: number; linkClicks: number; lpv: number };
+const NO_META: MetaTotals = { amount: 0, impressions: 0, linkClicks: 0, lpv: 0 };
+const sumMeta = (rows: SpendRow[], keep: (r: SpendRow) => boolean): MetaTotals =>
+  rows.reduce(
+    (t, r) =>
+      keep(r) ? { amount: t.amount + r.amount, impressions: t.impressions + r.impressions, linkClicks: t.linkClicks + r.linkClicks, lpv: t.lpv + r.lpv } : t,
+    NO_META,
+  );
+/** n ÷ d as a percentage, or a dash when there's nothing to divide by. */
+const ratio = (n: number, d: number, digits: number) => (d ? `${((n / d) * 100).toFixed(digits)}%` : "—");
+/** Spend per 1,000 impressions. */
+const perThousand = (t: MetaTotals, currency: string) => (t.impressions ? formatMoney((t.amount / t.impressions) * 1000, currency) : "—");
 const pct = (n: number, total: number) => `${Math.round((n / total) * 100)}%`;
 /** VIP purchases as a share of registrants, to one decimal place. */
 const uptake = (vips: number, registrants: number) => (registrants ? `${((vips / registrants) * 100).toFixed(1)}%` : "—");
@@ -506,7 +526,7 @@ function Donut({ slices, total, selected, onSelect }: { slices: Slice[]; total: 
  * Every slice as a row: colour, name, count and share, plus spend, VIP purchases and both costs where
  * there's spend behind the dimension. Doubles as the chart's legend and table view.
  */
-type SortKey = "label" | "count" | "spend" | "costReg" | "vips" | "vipRate" | "costVip";
+type SortKey = "label" | "count" | "spend" | "cpm" | "ctr" | "lpv" | "lpConv" | "costReg" | "vips" | "vipRate" | "costVip";
 
 function BreakdownTable({
   slices,
@@ -527,7 +547,7 @@ function BreakdownTable({
   showSpend: boolean;
   showVip: boolean;
 }) {
-  const cost = (m: Money | undefined, count: number | undefined) => (m?.spend == null || !count ? "—" : formatMoney(m.spend / count, currency));
+  const cost = (m: Money | undefined, count: number | undefined) => (m?.meta == null || !count ? "—" : formatMoney(m.meta.amount / count, currency));
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
   // Click a heading to sort by it (biggest first, A to Z for Value), again to flip, a third time to go back.
   const sortBy = (key: SortKey) =>
@@ -538,11 +558,16 @@ function BreakdownTable({
     });
   const valueOf = (s: Slice, key: SortKey): number | string | null => {
     const m = money[s.label];
-    const per = (count: number | undefined) => (m?.spend == null || !count ? null : m.spend / count);
+    const t = m?.meta;
+    const per = (count: number | undefined) => (t == null || !count ? null : t.amount / count);
     switch (key) {
       case "label": return s.label;
       case "count": return s.count;
-      case "spend": return m?.spend ?? null;
+      case "spend": return t?.amount ?? null;
+      case "cpm": return t?.impressions ? t.amount / t.impressions : null;
+      case "ctr": return t?.impressions ? t.linkClicks / t.impressions : null;
+      case "lpv": return t?.lpv ?? null;
+      case "lpConv": return t?.lpv ? (m?.fromAds ?? 0) / t.lpv : null;
       case "costReg": return per(m?.fromAds);
       case "vips": return s.label === OTHER ? null : (m?.vips ?? 0);
       case "vipRate": return s.label === OTHER || !s.count ? null : (m?.vips ?? 0) / s.count;
@@ -587,6 +612,10 @@ function BreakdownTable({
             {heading("count", "Registrants")}
             {heading("count", "Share", "w-16")}
             {showSpend && heading("spend", "Spend")}
+            {showSpend && heading("cpm", "CPM")}
+            {showSpend && heading("ctr", "Link CTR")}
+            {showSpend && heading("lpv", "LP views")}
+            {showSpend && heading("lpConv", "LP conv.")}
             {showSpend && heading("costReg", "Cost / reg")}
             {showVip && heading("vips", "VIP")}
             {showVip && heading("vipRate", "VIP %")}
@@ -612,7 +641,11 @@ function BreakdownTable({
                 </td>
                 <td className={`${td} font-semibold text-ink`}>{s.count.toLocaleString("en-GB")}</td>
                 <td className={`${td} text-muted`}>{pct(s.count, total)}</td>
-                {showSpend && <td className={`${td} text-ink`}>{m?.spend == null ? "—" : formatMoney(m.spend, currency)}</td>}
+                {showSpend && <td className={`${td} text-ink`}>{m?.meta == null ? "—" : formatMoney(m.meta.amount, currency)}</td>}
+                {showSpend && <td className={`${td} text-ink`}>{m?.meta == null ? "—" : perThousand(m.meta, currency)}</td>}
+                {showSpend && <td className={`${td} text-muted`}>{m?.meta == null ? "—" : ratio(m.meta.linkClicks, m.meta.impressions, 2)}</td>}
+                {showSpend && <td className={`${td} text-ink`}>{m?.meta == null ? "—" : m.meta.lpv.toLocaleString("en-GB")}</td>}
+                {showSpend && <td className={`${td} text-muted`}>{m?.meta == null ? "—" : ratio(m.fromAds, m.meta.lpv, 1)}</td>}
                 {showSpend && <td className={`${td} text-ink`}>{cost(m, m?.fromAds)}</td>}
                 {showVip && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.vips ?? 0).toLocaleString("en-GB")}</td>}
                 {showVip && <td className={`${td} text-muted`}>{s.label === OTHER ? "—" : uptake(m?.vips ?? 0, s.count)}</td>}
