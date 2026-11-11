@@ -65,7 +65,7 @@ export function RegistrantsDashboard({
 }: {
   registrants: Registrant[];
   tracksVip: boolean; // the client has a "VIP Ticket Purchased" field in GHL
-  tracksCalls: boolean; // the client has an "Appointment Booked Date" field in GHL
+  tracksCalls: boolean; // GHL's calendar is readable, or the client has call fields (Appointment Booked Date and so on)
   spend: SpendRow[] | "error" | null; // Meta spend per ad and day in `currency`; null if no ad account is connected
   currency: string; // e.g. "USD" or "EUR"
   webinars: { key: string; label: string }[]; // tagged in GHL or on the calendar, including upcoming ones
@@ -112,8 +112,14 @@ export function RegistrantsDashboard({
     return range === "today" ? day === today : day > daysAgo(Number(range));
   };
   const shown = matching.filter(inRange);
+  // A call counts when it was booked on or after the day of the webinar they registered for (any of
+  // theirs under "All webinars"). Calls with no known day (only "Appointment Booked" = yes) always count.
+  const bookedCall = (r: Registrant) =>
+    r.callBooked && (!r.callBookedOn || r.webinars.some((w) => (webinar === "all" || w.key === webinar) && r.callBookedOn! >= w.key));
   // Costs only count people who came from an ad, since that's who the spend paid for.
   let vipPurchases = 0;
+  let callsBooked = 0;
+  let callsFromAds = 0;
   let fromAds = 0;
   let vipsFromAds = 0;
   // The same counts per value of the breakdown dimension, for the table's money columns.
@@ -123,17 +129,17 @@ export function RegistrantsDashboard({
     if (r.vip) vipPurchases++;
     if (r.ad) fromAds++;
     if (r.ad && r.vip) vipsFromAds++;
-    const c = byValue.get(valueOf(r, dimension)) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 };
+    const call = bookedCall(r);
+    if (call) callsBooked++;
+    if (call && r.ad) callsFromAds++;
+    const c = byValue.get(valueOf(r, dimension)) ?? { ...NO_COUNTS };
     if (r.ad) c.fromAds++;
     if (r.vip) c.vips++;
     if (r.ad && r.vip) c.vipsFromAds++;
+    if (call) c.calls++;
+    if (call && r.ad) c.callsFromAds++;
     byValue.set(valueOf(r, dimension), c);
   }
-  // A call counts when it was booked on or after the day of the webinar they registered for (any of
-  // theirs under "All webinars"). The GHL field holds a day, not a time.
-  const callsBooked = shown.filter(
-    (r) => r.callBookedOn && r.webinars.some((w) => (webinar === "all" || w.key === webinar) && r.callBookedOn! >= w.key),
-  ).length;
   const newToday = matching.filter((r) => dayIn(r.addedAt, zone) === today).length;
   const last7 = matching.filter((r) => dayIn(r.addedAt, zone) > daysAgo(7)).length;
 
@@ -231,7 +237,7 @@ export function RegistrantsDashboard({
       : [];
   const tableSlices = [...slices, ...spendOnly];
   const money = Object.fromEntries(
-    tableSlices.map((sl) => [sl.label, { meta: sl.label === OTHER ? null : metaFor(sl.label), ...(byValue.get(sl.label) ?? { fromAds: 0, vips: 0, vipsFromAds: 0 }) }]),
+    tableSlices.map((sl) => [sl.label, { meta: sl.label === OTHER ? null : metaFor(sl.label), ...(byValue.get(sl.label) ?? NO_COUNTS) }]),
   );
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
@@ -322,6 +328,10 @@ export function RegistrantsDashboard({
               <MetricRow label="Cost per VIP purchase" value={costPer(vipsFromAds)} hint={`Ad spend ÷ ${vipsFromAds.toLocaleString("en-GB")} from ads`} />
             )}
             {tracksCalls && <MetricRow label="Calls booked" value={callsBooked} hint="Registrants who booked a call on or after the webinar day" />}
+            {tracksCalls && <MetricRow label="Call booking rate" value={uptake(callsBooked, shown.length)} hint="Calls booked ÷ registrants" />}
+            {spend && tracksCalls && (
+              <MetricRow label="Cost per call booked" value={costPer(callsFromAds)} hint={`Ad spend ÷ ${callsFromAds.toLocaleString("en-GB")} from ads`} />
+            )}
           </section>
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />
@@ -374,6 +384,7 @@ export function RegistrantsDashboard({
               currency={currency}
               showSpend={showSpend}
               showVip={tracksVip}
+              showCalls={tracksCalls}
             />
           </div>
         )}
@@ -433,7 +444,8 @@ function Stat({ label, value, hint, accent = false }: { label: string; value: nu
 }
 
 type Slice = { label: string; count: number; colour: string };
-type Counts = { fromAds: number; vips: number; vipsFromAds: number };
+type Counts = { fromAds: number; vips: number; vipsFromAds: number; calls: number; callsFromAds: number };
+const NO_COUNTS: Counts = { fromAds: 0, vips: 0, vipsFromAds: 0, calls: 0, callsFromAds: 0 };
 type Money = Counts & { meta: MetaTotals | null };
 type MetaTotals = { amount: number; impressions: number; linkClicks: number; lpv: number };
 const NO_META: MetaTotals = { amount: 0, impressions: 0, linkClicks: 0, lpv: 0 };
@@ -448,7 +460,7 @@ const ratio = (n: number, d: number, digits: number) => (d ? `${((n / d) * 100).
 /** Spend per 1,000 impressions. */
 const perThousand = (t: MetaTotals, currency: string) => (t.impressions ? formatMoney((t.amount / t.impressions) * 1000, currency) : "—");
 const pct = (n: number, total: number) => `${Math.round((n / total) * 100)}%`;
-/** VIP purchases as a share of registrants, to one decimal place. */
+/** VIP purchases (or calls booked) as a share of registrants, to one decimal place. */
 const uptake = (vips: number, registrants: number) => (registrants ? `${((vips / registrants) * 100).toFixed(1)}%` : "—");
 
 /** A donut of the breakdown, with a 2px white gap between slices and a tooltip on hover. */
@@ -523,10 +535,10 @@ function Donut({ slices, total, selected, onSelect }: { slices: Slice[]; total: 
 }
 
 /**
- * Every slice as a row: colour, name, count and share, plus spend, VIP purchases and both costs where
+ * Every slice as a row: colour, name, count and share, plus spend, VIP purchases, calls booked and their costs where
  * there's spend behind the dimension. Doubles as the chart's legend and table view.
  */
-type SortKey = "label" | "count" | "spend" | "cpm" | "ctr" | "lpv" | "lpConv" | "costReg" | "vips" | "vipRate" | "costVip";
+type SortKey = "label" | "count" | "spend" | "cpm" | "ctr" | "lpv" | "lpConv" | "costReg" | "vips" | "vipRate" | "costVip" | "calls" | "callRate" | "costCall";
 
 function BreakdownTable({
   slices,
@@ -537,6 +549,7 @@ function BreakdownTable({
   currency,
   showSpend,
   showVip,
+  showCalls,
 }: {
   slices: Slice[];
   total: number;
@@ -546,6 +559,7 @@ function BreakdownTable({
   currency: string;
   showSpend: boolean;
   showVip: boolean;
+  showCalls: boolean;
 }) {
   const cost = (m: Money | undefined, count: number | undefined) => (m?.meta == null || !count ? "—" : formatMoney(m.meta.amount / count, currency));
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
@@ -572,6 +586,9 @@ function BreakdownTable({
       case "vips": return s.label === OTHER ? null : (m?.vips ?? 0);
       case "vipRate": return s.label === OTHER || !s.count ? null : (m?.vips ?? 0) / s.count;
       case "costVip": return per(m?.vipsFromAds);
+      case "calls": return s.label === OTHER ? null : (m?.calls ?? 0);
+      case "callRate": return s.label === OTHER || !s.count ? null : (m?.calls ?? 0) / s.count;
+      case "costCall": return per(m?.callsFromAds);
     }
   };
   const rows = !sort
@@ -620,6 +637,9 @@ function BreakdownTable({
             {showVip && heading("vips", "VIP")}
             {showVip && heading("vipRate", "VIP %")}
             {showSpend && showVip && heading("costVip", "Cost / VIP")}
+            {showCalls && heading("calls", "Calls")}
+            {showCalls && heading("callRate", "Call %")}
+            {showSpend && showCalls && heading("costCall", "Cost / call")}
           </tr>
         </thead>
         <tbody>
@@ -650,6 +670,9 @@ function BreakdownTable({
                 {showVip && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.vips ?? 0).toLocaleString("en-GB")}</td>}
                 {showVip && <td className={`${td} text-muted`}>{s.label === OTHER ? "—" : uptake(m?.vips ?? 0, s.count)}</td>}
                 {showSpend && showVip && <td className={`${td} text-ink`}>{cost(m, m?.vipsFromAds)}</td>}
+                {showCalls && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.calls ?? 0).toLocaleString("en-GB")}</td>}
+                {showCalls && <td className={`${td} text-muted`}>{s.label === OTHER ? "—" : uptake(m?.calls ?? 0, s.count)}</td>}
+                {showSpend && showCalls && <td className={`${td} text-ink`}>{cost(m, m?.callsFromAds)}</td>}
               </tr>
             );
           })}

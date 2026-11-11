@@ -111,7 +111,8 @@ export interface Registrant {
   lastTouch?: string; // Trakyo last touch, "Instagram · IG BIO → Register"
   tracking: "Trakyo" | "UTM" | "Not tracked";
   vip?: boolean; // bought the VIP upgrade (GHL field "VIP Ticket Purchased" = Yes); undefined if the client has no such field
-  callBookedOn?: string; // YYYY-MM-DD from GHL field "Appointment Booked Date"; undefined if no call is booked
+  callBooked: boolean; // booked a call: on the GHL calendar, or a call field (Appointment Booked Date, Call Date, Closer...) is filled in
+  callBookedOn?: string; // YYYY-MM-DD the call was booked (calendar) or from the call's date fields; undefined if no day is known
 }
 
 // One ad's Meta spend on one ad-account day, in the client's currency (see meta.ts).

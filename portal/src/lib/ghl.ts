@@ -5,7 +5,8 @@
 // GHL_CLIENTS (env) maps a Notion client id to its GHL sub-account:
 //   {"<notion client id>": {"locationId": "...", "token": "pit-...", "appUrl": "https://app.gohighlevel.com"}}
 // The token is a Private Integration token with contacts.readonly and
-// locations/customFields.readonly.
+// locations/customFields.readonly, plus calendars.readonly and calendars/events.readonly
+// for calls booked from the calendar (without them, calls come from custom fields only).
 
 import "server-only";
 import type { Registrant } from "@/lib/types";
@@ -38,12 +39,12 @@ export function ghlContactsUrl(clientId: string): string | null {
   return `${app}/v2/location/${account.locationId}/contacts/smart_list/All`;
 }
 
-async function ghl<T>(account: Account, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+async function ghl<T>(account: Account, path: string, init: { method?: string; body?: unknown; version?: string } = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: init.method ?? "GET",
     headers: {
       Authorization: `Bearer ${account.token}`,
-      Version: "2021-07-28",
+      Version: init.version ?? "2021-07-28",
       Accept: "application/json",
       "Content-Type": "application/json",
     },
@@ -60,6 +61,7 @@ async function ghl<T>(account: Account, path: string, init: { method?: string; b
 
 type Attribution = { utmSource?: string; utmMedium?: string; utmCampaign?: string; campaign?: string; utmContent?: string } | null;
 type Contact = {
+  id: string;
   dateAdded: string;
   tags?: string[];
   customFields?: { id: string; value?: unknown }[];
@@ -77,7 +79,12 @@ type FieldKey =
   | "trakyo_content"
   | "trakyo_last_touch"
   | "vip_ticket_purchased"
-  | "appointment_booked_date";
+  | "appointment_booked_date"
+  | "appointment_date"
+  | "call_date"
+  | "closer"
+  | "attendance"
+  | "appointment_booked";
 const FIELD_KEYS: FieldKey[] = [
   "utm_source",
   "utm_medium",
@@ -88,7 +95,15 @@ const FIELD_KEYS: FieldKey[] = [
   "trakyo_last_touch",
   "vip_ticket_purchased",
   "appointment_booked_date",
+  "appointment_date",
+  "call_date",
+  "closer",
+  "attendance",
+  "appointment_booked",
 ];
+// Any of these filled in means the contact has a call booked (or had one). The first with a date gives the day.
+const CALL_DATE_FIELDS: FieldKey[] = ["appointment_booked_date", "appointment_date", "call_date"];
+const CALL_FIELDS: FieldKey[] = [...CALL_DATE_FIELDS, "closer", "attendance", "appointment_booked"];
 
 /** The ids of the UTM, Trakyo, VIP and call-booked custom fields, by their field key (contact.utm_source and so on). */
 async function fieldIds(account: Account): Promise<Partial<Record<FieldKey, string>>> {
@@ -157,8 +172,41 @@ async function fetchWebinarTags(account: Account): Promise<Webinar[]> {
   return (tags ?? []).map((t) => webinarOf(t.name)).filter((w): w is Webinar => w !== null);
 }
 
+type CalendarEvent = { contactId?: string; dateAdded?: string; appointmentStatus?: string; deleted?: boolean };
+const BOOKINGS_BACK_MS = 365 * 86_400_000;
+const BOOKINGS_AHEAD_MS = 180 * 86_400_000;
+
+/**
+ * The day each contact last booked a call on any of the location's calendars (cancelled bookings left out),
+ * or null when the token can't read calendars.
+ */
+async function fetchBookings(account: Account): Promise<Map<string, string> | null> {
+  try {
+    const { calendars } = await ghl<{ calendars: { id: string }[] }>(account, `/calendars/?locationId=${account.locationId}`, { version: "2021-04-15" });
+    const now = Date.now();
+    const lists = await Promise.all(
+      (calendars ?? []).map((c) =>
+        ghl<{ events?: CalendarEvent[] }>(
+          account,
+          `/calendars/events?locationId=${account.locationId}&calendarId=${c.id}&startTime=${now - BOOKINGS_BACK_MS}&endTime=${now + BOOKINGS_AHEAD_MS}`,
+          { version: "2021-04-15" },
+        ),
+      ),
+    );
+    const booked = new Map<string, string>();
+    for (const e of lists.flatMap((l) => l.events ?? [])) {
+      if (!e.contactId || !e.dateAdded || e.deleted || e.appointmentStatus === "cancelled") continue;
+      const day = e.dateAdded.slice(0, 10);
+      if (day > (booked.get(e.contactId) ?? "")) booked.set(e.contactId, day);
+    }
+    return booked;
+  } catch {
+    return null; // logged in ghl(); usually a token without the calendar scopes
+  }
+}
+
 async function fetchRegistrants(account: Account): Promise<{ registrants: Registrant[]; tracksVip: boolean; tracksCalls: boolean }> {
-  const ids = await fieldIds(account);
+  const [ids, bookings] = await Promise.all([fieldIds(account), fetchBookings(account)]);
   const contacts: Contact[] = [];
   let searchAfter: unknown[] | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
@@ -232,8 +280,20 @@ async function fetchRegistrants(account: Account): Promise<{ registrants: Regist
 
   // "VIP Ticket Purchased" is set to Yes when someone buys the VIP upgrade; clients without the field have no VIP numbers.
   const vipField = ids.vip_ticket_purchased;
-  // "Appointment Booked Date" is a GHL date field (midnight UTC), so only the day is kept.
-  const bookedField = ids.appointment_booked_date;
+  // Calls booked: a booking on the GHL calendar, or any of the call fields filled in (the setters fill these
+  // in by hand, and "Appointment Booked" = yes on accounts without dates). GHL date fields are midnight UTC,
+  // so only the day is kept. The calendar's booking day wins over a field's.
+  const tracksCalls = bookings !== null || CALL_FIELDS.some((k) => ids[k]);
+  const callOf = (c: Contact) => {
+    const field = (key: FieldKey) => {
+      const id = ids[key];
+      return id ? text(c.customFields?.find((f) => f.id === id)?.value) : undefined;
+    };
+    const fromCalendar = bookings?.get(c.id);
+    const fieldDay = CALL_DATE_FIELDS.map(field).find(Boolean)?.slice(0, 10);
+    const flagged = CALL_FIELDS.some((k) => (k === "appointment_booked" ? /^(yes|true)$/i.test(field(k) ?? "") : field(k)));
+    return { callBooked: !!fromCalendar || flagged, callBookedOn: fromCalendar ?? fieldDay };
+  };
   const registrants = rows.map((row) => {
     const { c, utm, trakyo, webinars } = row;
     return {
@@ -245,10 +305,10 @@ async function fetchRegistrants(account: Account): Promise<{ registrants: Regist
       lastTouch: trakyo.last,
       tracking: trakyo.source ? "Trakyo" : utm.source ? "UTM" : "Not tracked",
       vip: vipField ? c.customFields?.find((f) => f.id === vipField)?.value === "Yes" : undefined,
-      callBookedOn: bookedField ? text(c.customFields?.find((f) => f.id === bookedField)?.value)?.slice(0, 10) : undefined,
+      ...callOf(c),
     } satisfies Registrant;
   });
-  return { registrants, tracksVip: !!vipField, tracksCalls: !!bookedField };
+  return { registrants, tracksVip: !!vipField, tracksCalls };
 }
 
 type Fetched = { registrants: Registrant[]; tracksVip: boolean; tracksCalls: boolean; webinars: Webinar[]; fetchedAt: number };
