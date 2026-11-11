@@ -229,10 +229,15 @@ export function RegistrantsDashboard({
     .sort((a, b) => b.count - a.count || (b.meta?.amount ?? 0) - (a.meta?.amount ?? 0) || a.label.localeCompare(b.label));
   const hasAds = !!spend || registrants.some((r) => r.ad);
 
-  // Peak and pitch are typed into the webinar's Notion event after it runs, so they're for one webinar only.
+  // Peak and pitch come from the webinar's row in Notion (Client Events), so they're for one whole webinar.
+  // Rates built on them (attendance, retention, call booking) match Notion's formulas, and only show when
+  // nothing narrows the registrants or calls (a source filter or date range would make them meaningless).
   const live = webinar === "all" ? undefined : attendance[webinar];
+  const whole = range === "all" && DIMENSIONS.every(({ key }) => !filters[key]);
   const liveHint = (what: string, value?: number) =>
-    webinar === "all" ? "Choose a webinar to see this" : value != null ? what : webinar >= today ? "Added after the webinar" : "Not added yet";
+    webinar === "all" ? "Choose a webinar to see this" : value != null ? what : webinar >= today ? "Added after the webinar" : "Not added in Notion yet";
+  const pitchRate = (count: number, what: string) =>
+    !live?.pitch ? { value: "—", hint: liveHint("", undefined) } : !whole ? { value: "—", hint: "For the whole webinar only: clear the filters" } : { value: ratio(count, live.pitch, 1), hint: what };
 
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
@@ -256,13 +261,13 @@ export function RegistrantsDashboard({
     ...(tracksAttendance
       ? [
           { label: "Attended", sort: (r: Row) => r.counts.attended, show: (r: Row) => n(r.counts.attended) },
-          { label: "Attendance %", sort: (r: Row) => (r.count ? r.counts.attended / r.count : null), show: (r: Row) => uptake(r.counts.attended, r.count), muted: true },
+          { label: "Attended ÷ reg.", sort: (r: Row) => (r.count ? r.counts.attended / r.count : null), show: (r: Row) => uptake(r.counts.attended, r.count), muted: true },
         ]
       : []),
     ...(tracksCalls
       ? [
           { label: "Calls", sort: (r: Row) => r.counts.calls, show: (r: Row) => n(r.counts.calls) },
-          { label: "Call %", sort: (r: Row) => (r.count ? r.counts.calls / r.count : null), show: (r: Row) => uptake(r.counts.calls, r.count), muted: true },
+          { label: "Calls ÷ reg.", sort: (r: Row) => (r.count ? r.counts.calls / r.count : null), show: (r: Row) => uptake(r.counts.calls, r.count), muted: true },
         ]
       : []),
   ];
@@ -383,8 +388,8 @@ export function RegistrantsDashboard({
             <MetricRow label="Attendees at pitch" value={live?.pitch != null ? n(live.pitch) : "—"} hint={liveHint("Watching when the offer was made", live?.pitch)} />
             <MetricRow
               label="Attendance rate"
-              value={tracksAttendance ? uptake(total.attended, total.registrants) : "—"}
-              hint={tracksAttendance ? `${n(total.attended)} attended ÷ registrants` : "Once attendees are tagged in GHL"}
+              value={live?.peak && whole ? ratio(live.peak, total.registrants, 1) : "—"}
+              hint={!live?.peak ? liveHint("", undefined) : whole ? "Attendees at peak ÷ registrants" : "For the whole webinar only: clear the filters"}
             />
             <MetricRow
               label="Retention rate"
@@ -395,7 +400,7 @@ export function RegistrantsDashboard({
           {tracksCalls && (
             <MetricGroup title="Calls">
               <MetricRow label="Calls booked" value={n(total.calls)} hint="Booked on or after the webinar day" />
-              <MetricRow label="Call booking rate" value={uptake(total.calls, total.registrants)} hint="Calls booked ÷ registrants" />
+              <MetricRow label="Call booking rate" {...pitchRate(total.calls, "Calls booked ÷ attendees at pitch")} />
             </MetricGroup>
           )}
 

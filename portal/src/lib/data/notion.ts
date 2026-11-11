@@ -15,6 +15,7 @@ export const TASKS_DS = process.env.NOTION_TASKS_DS ?? "3e404bbf-db00-804b-9f7d-
 const CONTENT_TTL_MS = 60_000; // how long page content and template icons are cached
 export const TRACKER_DS = process.env.NOTION_TRACKER_DS ?? "3c104bbf-db00-802e-b3e3-000bba4c7e16";
 export const USERS_DS = process.env.NOTION_USERS_DS ?? "cbac4674-b2ff-472e-8057-dfe82c253644";
+export const WEBINARS_DS = process.env.NOTION_WEBINARS_DS ?? "40104bbf-db00-8087-a129-000b0c353098";
 export const ADS_DS = process.env.NOTION_ADS_DS ?? "a3304bbf-db00-83b0-b86f-870de7f1283e";
 
 // ── HTTP ────────────────────────────────────────────
@@ -331,8 +332,7 @@ export async function setTaskResponseInNotion(taskId: string, response: string):
 // ── Events ──────────────────────────────────────────
 // Events are Project Management Tracker rows with Event ticked. Fields used:
 // Task (title), Client, Due Date (Posting Date for a milestone that has one),
-// Client links, Milestone (a milestone can't be changed from the portal), and on webinars
-// Peak attendees and Attendees at pitch (typed in after the webinar, for Results). Notion keeps a time zone we send, but its
+// Client links, and Milestone (a milestone can't be changed from the portal). Notion keeps a time zone we send, but its
 // API only returns the UTC offset (e.g. 19:00-04:00), which is enough to show it.
 
 const ticked = (page: Page, name: string) => Boolean(page.properties[name]?.checkbox);
@@ -348,7 +348,7 @@ const calendarDate = (page: Page) =>
 export async function queryClientEvents(
   clientId: string,
   { from = new Date().toISOString().slice(0, 10), until }: { from?: string; until?: string } = {},
-): Promise<(ClientEvent & { clientIds: string[]; milestone: boolean; peak?: number; pitch?: number })[]> {
+): Promise<(ClientEvent & { clientIds: string[]; milestone: boolean })[]> {
   const pages = await queryAll(TRACKER_DS, {
     filter: {
       and: [
@@ -379,8 +379,6 @@ export async function queryClientEvents(
         links: toRichText(page.properties["Client links"]?.rich_text),
         clientIds: (page.properties["Client"]?.relation ?? []).map((r) => r.id),
         milestone: ticked(page, "Milestone"),
-        peak: page.properties["Peak attendees"]?.number ?? undefined,
-        pitch: page.properties["Attendees at pitch"]?.number ?? undefined,
       };
     });
 }
@@ -991,4 +989,21 @@ export async function applyBlockEdits(pageId: string, edits: BlockEdits): Promis
   }
   for (const d of edits.deletes) await notion(`/blocks/${find(d.id)!.id}`, { method: "DELETE" });
   hasBodyCache.delete(pageId);
+}
+
+// ── Webinar results ─────────────────────────────────
+// "Client Events" rows: one per webinar, with Client, Start Date, and the live numbers typed in
+// after it runs (Attendees at Peak, Attendees at Pitch).
+
+/** Attendees at peak and at pitch for this client's webinars, by the webinar's day (YYYY-MM-DD in its own time zone). */
+export async function queryWebinarAttendance(clientId: string): Promise<{ day: string; clientIds: string[]; peak?: number; pitch?: number }[]> {
+  const pages = await queryAll(WEBINARS_DS, { filter: { property: "Client", relation: { contains: clientId } } });
+  return pages
+    .filter((page) => !page.in_trash && !page.archived && page.properties["Start Date"]?.date?.start)
+    .map((page) => ({
+      day: page.properties["Start Date"]!.date!.start.slice(0, 10),
+      clientIds: (page.properties["Client"]?.relation ?? []).map((r) => r.id),
+      peak: page.properties["Attendees at Peak"]?.number ?? undefined,
+      pitch: page.properties["Attendees at Pitch"]?.number ?? undefined,
+    }));
 }
