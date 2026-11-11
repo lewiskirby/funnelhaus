@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { formatDay } from "@/lib/calendar";
-import { getClientEvents } from "@/lib/data";
+import { getClientEvents, getWebinarAttendance } from "@/lib/data";
 import { getWebinarRegistrants, ghlContactsUrl, type Webinar } from "@/lib/ghl";
 import { getAdSpend } from "@/lib/meta";
 import { requireClient } from "@/lib/session";
@@ -26,9 +26,10 @@ export default async function ResultsPage() {
   if (!ghlUrl) return <ComingSoon />;
 
   // A GHL failure shows a message below; details are logged in ghl.ts. A Meta failure only blanks the spend tiles.
-  const [data, events, spend] = await Promise.all([
+  const [data, events, attendance, spend] = await Promise.all([
     getWebinarRegistrants(client.id).catch(() => null),
     getClientEvents(client.id),
+    getWebinarAttendance(client.id),
     getAdSpend(client.id).catch(() => "error" as const),
   ]);
 
@@ -55,6 +56,7 @@ export default async function ResultsPage() {
           registrants={data.registrants}
           tracksVip={data.tracksVip}
           tracksCalls={data.tracksCalls}
+          attendance={attendance}
           spend={spend && spend !== "error" ? spend.rows : spend}
           currency={spend && spend !== "error" ? spend.currency : "USD"}
           webinars={[...webinars.values()]}

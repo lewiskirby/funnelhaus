@@ -331,7 +331,8 @@ export async function setTaskResponseInNotion(taskId: string, response: string):
 // ── Events ──────────────────────────────────────────
 // Events are Project Management Tracker rows with Event ticked. Fields used:
 // Task (title), Client, Due Date (Posting Date for a milestone that has one),
-// Client links, and Milestone (a milestone can't be changed from the portal). Notion keeps a time zone we send, but its
+// Client links, Milestone (a milestone can't be changed from the portal), and on webinars
+// Peak attendees and Attendees at pitch (typed in after the webinar, for Results). Notion keeps a time zone we send, but its
 // API only returns the UTC offset (e.g. 19:00-04:00), which is enough to show it.
 
 const ticked = (page: Page, name: string) => Boolean(page.properties[name]?.checkbox);
@@ -347,7 +348,7 @@ const calendarDate = (page: Page) =>
 export async function queryClientEvents(
   clientId: string,
   { from = new Date().toISOString().slice(0, 10), until }: { from?: string; until?: string } = {},
-): Promise<(ClientEvent & { clientIds: string[]; milestone: boolean })[]> {
+): Promise<(ClientEvent & { clientIds: string[]; milestone: boolean; peak?: number; pitch?: number })[]> {
   const pages = await queryAll(TRACKER_DS, {
     filter: {
       and: [
@@ -378,6 +379,8 @@ export async function queryClientEvents(
         links: toRichText(page.properties["Client links"]?.rich_text),
         clientIds: (page.properties["Client"]?.relation ?? []).map((r) => r.id),
         milestone: ticked(page, "Milestone"),
+        peak: page.properties["Peak attendees"]?.number ?? undefined,
+        pitch: page.properties["Attendees at pitch"]?.number ?? undefined,
       };
     });
 }

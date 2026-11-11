@@ -111,6 +111,7 @@ export interface Registrant {
   lastTouch?: string; // Trakyo last touch, "Instagram · IG BIO → Register"
   tracking: "Trakyo" | "UTM" | "Not tracked";
   vip?: boolean; // bought the VIP upgrade (GHL field "VIP Ticket Purchased" = Yes); undefined if the client has no such field
+  attended: string[]; // webinar days (YYYY-MM-DD) they attended, from tags like "14oct2026-attended"
   callBooked: boolean; // booked a call: on the GHL calendar, or a call field (Appointment Booked Date, Call Date, Closer...) is filled in
   callBookedOn?: string; // YYYY-MM-DD the call was booked (calendar) or from the call's date fields; undefined if no day is known
 }

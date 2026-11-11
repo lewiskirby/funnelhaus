@@ -378,9 +378,28 @@ export async function getClientEvents(clientId: string): Promise<ClientEvent[]> 
     return events
       .filter((e) => e.clientIds.some((id) => sameId(id, clientId)))
       // Events shared with other clients, and milestones, are read-only here.
-      .map(({ clientIds, milestone, ...event }) => ({ ...event, editable: clientIds.length === 1 && !milestone }));
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      .map(({ clientIds, milestone, peak, pitch, ...event }) => ({ ...event, editable: clientIds.length === 1 && !milestone }));
   } catch {
     return []; // Details are logged in notion.ts; Home still loads.
+  }
+}
+
+/**
+ * Peak attendees and Attendees at pitch from this client's webinar events in the last year, by the
+ * webinar's day (YYYY-MM-DD, as in its GHL tags). Webinars with neither filled in are left out.
+ */
+export async function getWebinarAttendance(clientId: string): Promise<Record<string, { peak?: number; pitch?: number }>> {
+  try {
+    const from = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
+    const events = await notion.queryClientEvents(clientId, { from });
+    return Object.fromEntries(
+      events
+        .filter((e) => e.clientIds.some((id) => sameId(id, clientId)) && isWebinar(e.name) && (e.peak != null || e.pitch != null))
+        .map((e) => [e.start.slice(0, 10), { peak: e.peak, pitch: e.pitch }]),
+    );
+  } catch {
+    return {}; // Details are logged in notion.ts; Results still loads.
   }
 }
 

@@ -114,17 +114,25 @@ async function fieldIds(account: Account): Promise<Partial<Record<FieldKey, stri
   return Object.fromEntries(FIELD_KEYS.map((k) => [k, customFields.find((f) => f.fieldKey === `contact.${k}`)?.id]));
 }
 
-// Per-webinar tags look like "14-october-2026-webinar", "1nov2026-registered" or "2026-11-10-registered" (not "14oct2026-attended").
-const WEBINAR_TAGS = [/^(\d{1,2})-([a-z]+)-(\d{4})-webinar$/, /^(\d{1,2})([a-z]+)(\d{4})-registered$/];
-const NUMERIC_WEBINAR_TAG = /^(\d{4})-(\d{2})-(\d{2})-registered$/;
+// Per-webinar tags look like "14-october-2026-webinar", "1nov2026-registered" or "2026-11-10-registered";
+// attendees also get "14oct2026-attended" (or "2026-11-10-attended").
+type TagKind = "registered" | "attended";
+const WEBINAR_TAGS: Record<TagKind, RegExp[]> = {
+  registered: [/^(\d{1,2})-([a-z]+)-(\d{4})-webinar$/, /^(\d{1,2})([a-z]+)(\d{4})-registered$/],
+  attended: [/^(\d{1,2})([a-z]+)(\d{4})-attended$/],
+};
+const NUMERIC_WEBINAR_TAG: Record<TagKind, RegExp> = {
+  registered: /^(\d{4})-(\d{2})-(\d{2})-registered$/,
+  attended: /^(\d{4})-(\d{2})-(\d{2})-attended$/,
+};
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const capital = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
 /** "14-october-2026-webinar", "14oct2026-registered" or "2026-10-14-registered" → { key: "2026-10-14", label: "14 October 2026" }. */
-function webinarOf(tag: string): { key: string; label: string } | null {
+function webinarOf(tag: string, kind: TagKind = "registered"): { key: string; label: string } | null {
   const name = tag.trim().toLowerCase();
-  const numeric = NUMERIC_WEBINAR_TAG.exec(name);
-  const m = numeric ?? WEBINAR_TAGS.map((re) => re.exec(name)).find(Boolean);
+  const numeric = NUMERIC_WEBINAR_TAG[kind].exec(name);
+  const m = numeric ?? WEBINAR_TAGS[kind].map((re) => re.exec(name)).find(Boolean);
   if (!m) return null;
   const month = numeric ? Number(numeric[2]) - 1 : MONTHS.findIndex((mo) => m[2].length >= 3 && mo.startsWith(m[2]));
   const day = Number(numeric ? numeric[3] : m[1]);
@@ -242,7 +250,7 @@ async function fetchRegistrants(account: Account): Promise<{ registrants: Regist
     };
     const trakyo = { source: field("trakyo_source"), content: field("trakyo_content"), last: touch(field("trakyo_last_touch")) };
     const webinars = new Map<string, Webinar>();
-    for (const w of (c.tags ?? []).map(webinarOf)) if (w) webinars.set(w.key, w);
+    for (const w of (c.tags ?? []).map((t) => webinarOf(t))) if (w) webinars.set(w.key, w);
     return { c, utm, trakyo, webinars: [...webinars.values()] };
   });
 
@@ -305,6 +313,7 @@ async function fetchRegistrants(account: Account): Promise<{ registrants: Regist
       lastTouch: trakyo.last,
       tracking: trakyo.source ? "Trakyo" : utm.source ? "UTM" : "Not tracked",
       vip: vipField ? c.customFields?.find((f) => f.id === vipField)?.value === "Yes" : undefined,
+      attended: [...new Set((c.tags ?? []).map((t) => webinarOf(t, "attended")?.key).filter((k): k is string => !!k))],
       ...callOf(c),
     } satisfies Registrant;
   });

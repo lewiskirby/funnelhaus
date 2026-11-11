@@ -53,10 +53,16 @@ const nameKey = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase()
 const formatMoney = (n: number, currency: string) =>
   n.toLocaleString("en-US", { style: "currency", currency, currencyDisplay: "narrowSymbol", maximumFractionDigits: n >= 1000 ? 0 : 2 });
 
+// Two reports over the same filters: how the webinar did overall, and how the ads did.
+type Report = "webinar" | "ads";
+// The webinar report breaks registrants down by these; the ad report is always by ad.
+const OVERVIEW_DIMENSIONS = DIMENSIONS.filter(({ key }) => key !== "ad");
+
 export function RegistrantsDashboard({
   registrants,
   tracksVip,
   tracksCalls,
+  attendance,
   spend,
   currency,
   webinars: known,
@@ -66,6 +72,7 @@ export function RegistrantsDashboard({
   registrants: Registrant[];
   tracksVip: boolean; // the client has a "VIP Ticket Purchased" field in GHL
   tracksCalls: boolean; // GHL's calendar is readable, or the client has call fields (Appointment Booked Date and so on)
+  attendance: Record<string, { peak?: number; pitch?: number }>; // Peak attendees and Attendees at pitch from Notion, by webinar day
   spend: SpendRow[] | "error" | null; // Meta spend per ad and day in `currency`; null if no ad account is connected
   currency: string; // e.g. "USD" or "EUR"
   webinars: { key: string; label: string }[]; // tagged in GHL or on the calendar, including upcoming ones
@@ -85,6 +92,7 @@ export function RegistrantsDashboard({
     const day = dayIn(new Date(fetchedAt).toISOString(), DEFAULT_TZ);
     return keys.find((k) => k >= day) ?? keys[keys.length - 1] ?? "all";
   });
+  const [report, setReport] = useState<Report>("webinar");
   const [webinar, setWebinar] = useState(defaultWebinar);
   const [range, setRange] = useState<Range>("all");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -100,51 +108,47 @@ export function RegistrantsDashboard({
   const today = dayIn(new Date(now).toISOString(), zone);
   const daysAgo = (n: number) => dayIn(new Date(now - n * 86_400_000).toISOString(), zone);
 
-  // Everyone matching the webinar and source filters, before the date range.
-  const matching = registrants.filter(
-    (r) =>
-      (webinar === "all" || r.webinars.some((w) => w.key === webinar)) &&
-      DIMENSIONS.every(({ key }) => !filters[key] || valueOf(r, key) === filters[key]),
-  );
+  // Everyone matching the webinar and source filters, then the date range.
+  const inWebinar = (r: Registrant) => webinar === "all" || r.webinars.some((w) => w.key === webinar);
   const inRange = (r: Registrant) => {
     if (range === "all") return true;
     const day = dayIn(r.addedAt, zone);
     return range === "today" ? day === today : day > daysAgo(Number(range));
   };
-  const shown = matching.filter(inRange);
+  const shown = registrants.filter(
+    (r) => inWebinar(r) && DIMENSIONS.every(({ key }) => !filters[key] || valueOf(r, key) === filters[key]) && inRange(r),
+  );
+
   // A call counts when it was booked on or after the day of the webinar they registered for (any of
   // theirs under "All webinars"). Calls with no known day (only "Appointment Booked" = yes) always count.
   const bookedCall = (r: Registrant) =>
     r.callBooked && (!r.callBookedOn || r.webinars.some((w) => (webinar === "all" || w.key === webinar) && r.callBookedOn! >= w.key));
-  // Costs only count people who came from an ad, since that's who the spend paid for.
-  let vipPurchases = 0;
-  let callsBooked = 0;
-  let callsFromAds = 0;
-  let fromAds = 0;
-  let vipsFromAds = 0;
-  // The same counts per value of the breakdown dimension, for the table's money columns.
-  const byValue = new Map<string, Counts>();
-  for (const r of matching) {
-    if (!inRange(r)) continue;
-    if (r.vip) vipPurchases++;
-    if (r.ad) fromAds++;
-    if (r.ad && r.vip) vipsFromAds++;
-    const call = bookedCall(r);
-    if (call) callsBooked++;
-    if (call && r.ad) callsFromAds++;
-    const c = byValue.get(valueOf(r, dimension)) ?? { ...NO_COUNTS };
-    if (r.ad) c.fromAds++;
-    if (r.vip) c.vips++;
-    if (r.ad && r.vip) c.vipsFromAds++;
-    if (call) c.calls++;
-    if (call && r.ad) c.callsFromAds++;
-    byValue.set(valueOf(r, dimension), c);
-  }
-  const newToday = matching.filter((r) => dayIn(r.addedAt, zone) === today).length;
-  const last7 = matching.filter((r) => dayIn(r.addedAt, zone) > daysAgo(7)).length;
+  // Attendance comes from GHL's "<day>-attended" tags; a webinar nobody is tagged for yet shows dashes.
+  const attendedOne = (r: Registrant) => (webinar === "all" ? r.attended.length > 0 : r.attended.includes(webinar));
+  const forWebinar = registrants.filter(inWebinar);
+  const tracksAttendance = forWebinar.some(attendedOne);
+  const tally = (rs: Registrant[]): Counts => {
+    const c = { ...NO_COUNTS };
+    for (const r of rs) {
+      const call = bookedCall(r);
+      c.registrants++;
+      if (r.ad) c.fromAds++;
+      if (attendedOne(r)) c.attended++;
+      if (r.vip) c.vips++;
+      if (r.ad && r.vip) c.vipsFromAds++;
+      if (call) c.calls++;
+      if (call && r.ad) c.callsFromAds++;
+    }
+    return c;
+  };
+  const total = tally(shown);
+  const groupBy = (d: Dimension) => {
+    const groups = new Map<string, Registrant[]>();
+    for (const r of shown) groups.set(valueOf(r, d), [...(groups.get(valueOf(r, d)) ?? []), r]);
+    return new Map([...groups].map(([label, rs]) => [label, tally(rs)]));
+  };
 
   // Options for each source filter come from the chosen webinar, so they never lead to nothing.
-  const forWebinar = registrants.filter((r) => webinar === "all" || r.webinars.some((w) => w.key === webinar));
   // The Ad filter also offers ads that spent without bringing anyone in yet.
   const optionsFor = (d: Dimension) =>
     [...new Set([...forWebinar.map((r) => valueOf(r, d)), ...(d === "ad" && spend && spend !== "error" ? spend.map((r) => r.ad) : [])])].sort((a, b) =>
@@ -161,18 +165,17 @@ export function RegistrantsDashboard({
   }, [registrants, dimension]);
 
   // Not memoised by hand: the React Compiler handles it, and a manual memo here blocks it.
-  const slices = (() => {
-    const counts = new Map<string, number>();
-    for (const r of shown) counts.set(valueOf(r, dimension), (counts.get(valueOf(r, dimension)) ?? 0) + 1);
-    const sorted = [...counts].map(([label, count]) => ({ label, count, colour: isEmpty(label) ? MUTED : colours(label) }));
-    sorted.sort((a, b) => Number(isEmpty(a.label)) - Number(isEmpty(b.label)) || b.count - a.count || a.label.localeCompare(b.label));
-    // Values without their own colour are folded into "Other" so no two slices share a colour.
-    const own = sorted.filter((s) => s.colour !== MUTED || isEmpty(s.label));
-    const rest = sorted.filter((s) => s.colour === MUTED && !isEmpty(s.label));
-    if (rest.length) own.push({ label: OTHER, count: rest.reduce((n, s) => n + s.count, 0), colour: "#6f6f6b" });
-    return own;
-  })();
-
+  const groups = groupBy(dimension);
+  const sorted = [...groups].map(([label, c]) => ({ label, count: c.registrants, colour: isEmpty(label) ? MUTED : colours(label) }));
+  sorted.sort((a, b) => Number(isEmpty(a.label)) - Number(isEmpty(b.label)) || b.count - a.count || a.label.localeCompare(b.label));
+  // Values without their own colour are folded into "Other" so no two slices share a colour.
+  const slices: Slice[] = sorted.filter((s) => s.colour !== MUTED || isEmpty(s.label));
+  const folded = sorted.filter((s) => s.colour === MUTED && !isEmpty(s.label));
+  if (folded.length) slices.push({ label: OTHER, count: folded.reduce((n, s) => n + s.count, 0), colour: "#6f6f6b" });
+  const countsFor = (label: string) =>
+    label === OTHER
+      ? folded.reduce((sum, s) => addCounts(sum, groups.get(s.label) ?? NO_COUNTS), { ...NO_COUNTS })
+      : (groups.get(label) ?? NO_COUNTS);
 
   // Spend over the same days and filters as the registrants. A webinar's spend is every day after the
   // webinar before it, up to its own day. An Ad (or Content) filter narrows spend to that ad, and a Source
@@ -211,39 +214,31 @@ export function RegistrantsDashboard({
   const fmt = (n: number) => formatMoney(n, currency);
   const costPer = (count: number) => (spent === null ? "—" : count ? fmt(spent / count) : "—");
 
-  // Spend per breakdown row: the ad's (Ad or Content) or the campaign's (Source or Content), within the
-  // same days and filters as the tiles. Rows with no spend behind them (Instagram...) show a dash.
-  const metaFor = (label: string): MetaTotals | null => {
-    if (!spend || spend === "error" || unattributable) return null;
-    const key = nameKey(label);
-    const match =
-      (dimension === "ad" || dimension === "content") && ads.has(key)
-        ? (r: SpendRow) => nameKey(r.ad) === key
-        : (dimension === "source" || dimension === "content") && campaigns.has(key)
-          ? (r: SpendRow) => nameKey(r.campaign) === key
-          : null;
-    if (!match) return null;
-    return sumMeta(rows, (r) => match(r) && spendDay(r.day) && spendFilters.every((f) => f(r)));
+  // One ad's spend within the same days and filters as the tiles.
+  const metaForAd = (label: string): MetaTotals | null => {
+    if (!spend || spend === "error" || unattributable || !ads.has(nameKey(label))) return null;
+    return sumMeta(rows, (r) => nameKey(r.ad) === nameKey(label) && spendDay(r.day) && spendFilters.every((f) => f(r)));
   };
-  const showSpend = !!spend && (dimension === "ad" || dimension === "source" || dimension === "content");
-  // Ads that spent in this view but brought no registrants still get a row, after the rest.
-  const listed = new Set(slices.map((sl) => nameKey(sl.label)));
-  const spendOnly: Slice[] =
-    dimension === "ad" || dimension === "content"
-      ? [...new Map(rows.map((r) => [nameKey(r.ad), r.ad])).values()]
-          .filter((ad) => !listed.has(nameKey(ad)) && (metaFor(ad)?.amount ?? 0) > 0)
-          .sort((a, b) => (metaFor(b)?.amount ?? 0) - (metaFor(a)?.amount ?? 0))
-          .map((ad) => ({ label: ad, count: 0, colour: MUTED }))
-      : [];
-  const tableSlices = [...slices, ...spendOnly];
-  const money = Object.fromEntries(
-    tableSlices.map((sl) => [sl.label, { meta: sl.label === OTHER ? null : metaFor(sl.label), ...(byValue.get(sl.label) ?? NO_COUNTS) }]),
-  );
+  // The ad report: every ad that brought someone in, then ads that only spent, most registrants first.
+  const byAd = groupBy("ad");
+  byAd.delete(NOT_AN_AD);
+  const adNames = new Map<string, string>([...byAd.keys()].map((ad) => [nameKey(ad), ad]));
+  for (const r of rows) if (!adNames.has(nameKey(r.ad)) && (metaForAd(r.ad)?.amount ?? 0) > 0) adNames.set(nameKey(r.ad), r.ad);
+  const adRows: Row[] = [...adNames.values()]
+    .map((ad) => ({ label: ad, count: byAd.get(ad)?.registrants ?? 0, counts: byAd.get(ad) ?? NO_COUNTS, meta: metaForAd(ad) }))
+    .sort((a, b) => b.count - a.count || (b.meta?.amount ?? 0) - (a.meta?.amount ?? 0) || a.label.localeCompare(b.label));
+  const hasAds = !!spend || registrants.some((r) => r.ad);
+
+  // Peak and pitch are typed into the webinar's Notion event after it runs, so they're for one webinar only.
+  const live = webinar === "all" ? undefined : attendance[webinar];
+  const liveHint = (what: string, value?: number) =>
+    webinar === "all" ? "Choose a webinar to see this" : value != null ? what : webinar >= today ? "Added after the webinar" : "Not added yet";
+
   const active = DIMENSIONS.filter(({ key }) => filters[key]);
   const setFilter = (d: Dimension, value: string) => setFilters((f) => ({ ...f, [d]: value }));
-  const toggleSlice = (label: string) => {
+  const toggle = (d: Dimension) => (label: string) => {
     if (label === OTHER) return;
-    setFilter(dimension, filters[dimension] === label ? "" : label);
+    setFilter(d, filters[d] === label ? "" : label);
   };
   const clearAll = () => {
     setFilters(NO_FILTERS);
@@ -252,9 +247,79 @@ export function RegistrantsDashboard({
   };
 
   const rangeLabel = RANGES.find((r) => r.key === range)!.label.toLowerCase();
+  const n = (count: number) => count.toLocaleString("en-GB");
+
+  // Columns for the webinar report's breakdown and the ad report's table.
+  const overviewColumns: Column[] = [
+    { label: "Registrants", sort: (r) => r.count, show: (r) => n(r.count), strong: true },
+    { label: "Share", sort: (r) => r.count, show: (r) => pct(r.count, total.registrants), muted: true },
+    ...(tracksAttendance
+      ? [
+          { label: "Attended", sort: (r: Row) => r.counts.attended, show: (r: Row) => n(r.counts.attended) },
+          { label: "Attendance %", sort: (r: Row) => (r.count ? r.counts.attended / r.count : null), show: (r: Row) => uptake(r.counts.attended, r.count), muted: true },
+        ]
+      : []),
+    ...(tracksCalls
+      ? [
+          { label: "Calls", sort: (r: Row) => r.counts.calls, show: (r: Row) => n(r.counts.calls) },
+          { label: "Call %", sort: (r: Row) => (r.count ? r.counts.calls / r.count : null), show: (r: Row) => uptake(r.counts.calls, r.count), muted: true },
+        ]
+      : []),
+  ];
+  const per = (r: Row, count: number) => (r.meta == null || !count ? null : r.meta.amount / count);
+  const money = (v: number | null) => (v == null ? "—" : fmt(v));
+  const adColumns: Column[] = [
+    ...(spend
+      ? [
+          { label: "Spend", sort: (r: Row) => r.meta?.amount ?? null, show: (r: Row) => money(r.meta?.amount ?? null), strong: true },
+          { label: "CPM", sort: (r: Row) => (r.meta?.impressions ? r.meta.amount / r.meta.impressions : null), show: (r: Row) => (r.meta ? perThousand(r.meta, currency) : "—") },
+          { label: "Link CTR", sort: (r: Row) => (r.meta?.impressions ? r.meta.linkClicks / r.meta.impressions : null), show: (r: Row) => (r.meta ? ratio(r.meta.linkClicks, r.meta.impressions, 2) : "—"), muted: true },
+          { label: "LP views", sort: (r: Row) => r.meta?.lpv ?? null, show: (r: Row) => (r.meta ? n(r.meta.lpv) : "—") },
+          { label: "LP conv.", sort: (r: Row) => (r.meta?.lpv ? r.count / r.meta.lpv : null), show: (r: Row) => (r.meta ? ratio(r.count, r.meta.lpv, 1) : "—"), muted: true },
+        ]
+      : []),
+    { label: "Registrants", sort: (r) => r.count, show: (r) => n(r.count), strong: !spend },
+    ...(spend ? [{ label: "Cost / reg", sort: (r: Row) => per(r, r.count), show: (r: Row) => money(per(r, r.count)) }] : []),
+    ...(tracksCalls
+      ? [
+          { label: "Calls", sort: (r: Row) => r.counts.calls, show: (r: Row) => n(r.counts.calls) },
+          ...(spend ? [{ label: "Cost / call", sort: (r: Row) => per(r, r.counts.calls), show: (r: Row) => money(per(r, r.counts.calls)) }] : []),
+        ]
+      : []),
+    ...(tracksVip
+      ? [
+          { label: "VIP", sort: (r: Row) => r.counts.vips, show: (r: Row) => n(r.counts.vips) },
+          ...(spend ? [{ label: "Cost / VIP", sort: (r: Row) => per(r, r.counts.vips), show: (r: Row) => money(per(r, r.counts.vips)) }] : []),
+        ]
+      : []),
+  ];
 
   return (
     <div className="space-y-6">
+      {hasAds && (
+        <div role="tablist" aria-label="Report" className="inline-flex gap-1 rounded-full bg-white p-1 ring-1 ring-line">
+          {(
+            [
+              ["webinar", "Webinar performance"],
+              ["ads", "Ad performance"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={report === key}
+              onClick={() => setReport(key)}
+              className={`cursor-pointer rounded-full px-4 py-2 text-[13.5px] font-semibold transition ${
+                report === key ? "bg-ink-2 text-white" : "text-muted hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Filters */}
       <section className="card p-4 sm:p-5">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
@@ -305,93 +370,111 @@ export function RegistrantsDashboard({
         )}
       </section>
 
-      {/* Headline numbers */}
-      {spend || tracksVip || tracksCalls ? (
+      {report === "webinar" || !hasAds ? (
         <>
-          <section className="card divide-y divide-line px-5 sm:px-6">
-            <MetricRow label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} />
+          <MetricGroup title="Registrations">
+            <MetricRow label="Webinar registrants" value={n(total.registrants)} hint={range === "all" ? "All time" : rangeLabel} accent />
+            {hasAds && <MetricRow label="Registrants from ads" value={n(total.fromAds)} hint="Clicked a paid ad" />}
             {spend && <MetricRow label="Ad spend" value={spent === null ? "—" : fmt(spent)} hint={spendHint} />}
-            {spend && <MetricRow label="CPM" value={spent === null ? "—" : perThousand(totals!, currency)} hint="Ad spend per 1,000 impressions" />}
-            {spend && <MetricRow label="Link CTR" value={totals ? ratio(totals.linkClicks, totals.impressions, 2) : "—"} hint="Link clicks ÷ impressions" />}
-            {spend && <MetricRow label="Landing page views" value={totals ? totals.lpv : "—"} hint="From Meta" />}
-            {spend && (
-              <MetricRow
-                label="Landing page conversion"
-                value={totals ? ratio(fromAds, totals.lpv, 1) : "—"}
-                hint={`${fromAds.toLocaleString("en-GB")} registrants from ads ÷ landing page views`}
-              />
+            {spend && <MetricRow label="Cost per registrant" value={costPer(total.fromAds)} hint="Ad spend ÷ registrants from ads" />}
+          </MetricGroup>
+          <MetricGroup title="Attendance">
+            <MetricRow label="Attendees at peak" value={live?.peak != null ? n(live.peak) : "—"} hint={liveHint("Most watching at once", live?.peak)} />
+            <MetricRow label="Attendees at pitch" value={live?.pitch != null ? n(live.pitch) : "—"} hint={liveHint("Watching when the offer was made", live?.pitch)} />
+            <MetricRow
+              label="Attendance rate"
+              value={tracksAttendance ? uptake(total.attended, total.registrants) : "—"}
+              hint={tracksAttendance ? `${n(total.attended)} attended ÷ registrants` : "Once attendees are tagged in GHL"}
+            />
+            <MetricRow
+              label="Retention rate"
+              value={live?.peak && live.pitch != null ? ratio(live.pitch, live.peak, 1) : "—"}
+              hint={live?.peak && live.pitch != null ? "Attendees at pitch ÷ at peak" : liveHint("", undefined)}
+            />
+          </MetricGroup>
+          {tracksCalls && (
+            <MetricGroup title="Calls">
+              <MetricRow label="Calls booked" value={n(total.calls)} hint="Booked on or after the webinar day" />
+              <MetricRow label="Call booking rate" value={uptake(total.calls, total.registrants)} hint="Calls booked ÷ registrants" />
+            </MetricGroup>
+          )}
+
+          {/* Breakdown */}
+          <section className="card p-5 sm:p-6">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">Where registrants came from</h2>
+              <div role="tablist" aria-label="Break down by" className="flex w-full flex-wrap gap-1 rounded-[20px] bg-canvas p-1 ring-1 ring-line sm:w-auto sm:rounded-full">
+                {OVERVIEW_DIMENSIONS.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={dimension === key}
+                    onClick={() => setDimension(key)}
+                    className={`cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition ${
+                      dimension === key ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-line" : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {shown.length === 0 ? (
+              <Empty>No registrants match these filters yet.</Empty>
+            ) : (
+              <div className="grid grid-cols-1 items-center gap-8 xl:grid-cols-[260px_minmax(0,1fr)]">
+                <Donut slices={slices} total={shown.length} selected={filters[dimension]} onSelect={toggle(dimension)} />
+                <BreakdownTable
+                  rows={slices.map((s) => ({ ...s, counts: countsFor(s.label), meta: null }))}
+                  columns={overviewColumns}
+                  selected={filters[dimension]}
+                  onSelect={toggle(dimension)}
+                />
+              </div>
             )}
-            {spend && <MetricRow label="Cost per registrant" value={costPer(fromAds)} hint={`Ad spend ÷ ${fromAds.toLocaleString("en-GB")} from ads`} />}
-            {tracksVip && <MetricRow label="VIP purchases" value={vipPurchases} hint="Bought the VIP upgrade" />}
-            {tracksVip && <MetricRow label="VIP uptake" value={uptake(vipPurchases, shown.length)} hint="VIP purchases ÷ registrants" />}
-            {spend && tracksVip && (
-              <MetricRow label="Cost per VIP purchase" value={costPer(vipsFromAds)} hint={`Ad spend ÷ ${vipsFromAds.toLocaleString("en-GB")} from ads`} />
-            )}
-            {tracksCalls && <MetricRow label="Calls booked" value={callsBooked} hint="Registrants who booked a call on or after the webinar day" />}
-            {tracksCalls && <MetricRow label="Call booking rate" value={uptake(callsBooked, shown.length)} hint="Calls booked ÷ registrants" />}
-            {spend && tracksCalls && (
-              <MetricRow label="Cost per call booked" value={costPer(callsFromAds)} hint={`Ad spend ÷ ${callsFromAds.toLocaleString("en-GB")} from ads`} />
-            )}
-          </section>
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />
-            <Stat label="Last 7 days" value={last7} hint="Including today" />
+            <p className="mt-5 text-[12.5px] text-muted">
+              Tap a slice or row to filter by it. Sources come from Trakyo, or from UTMs where Trakyo has nothing. Registrants with neither show as {NOT_SET}.
+            </p>
           </section>
         </>
       ) : (
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Stat label="Webinar registrants" value={shown.length} hint={range === "all" ? "All time" : rangeLabel} accent />
-          <Stat label="New registrants today" value={newToday} hint={`Since midnight, your time`} />
-          <Stat label="Last 7 days" value={last7} hint="Including today" />
-        </section>
+        <>
+          {spend && (
+            <MetricGroup title="Reach">
+              <MetricRow label="Ad spend" value={spent === null ? "—" : fmt(spent)} hint={spendHint} accent />
+              <MetricRow label="CPM" value={totals ? perThousand(totals, currency) : "—"} hint="Ad spend per 1,000 impressions" />
+              <MetricRow label="Link CTR" value={totals ? ratio(totals.linkClicks, totals.impressions, 2) : "—"} hint="Link clicks ÷ impressions" />
+              <MetricRow label="Landing page views" value={totals ? n(totals.lpv) : "—"} hint="From Meta" />
+            </MetricGroup>
+          )}
+          <MetricGroup title="Registrations">
+            {spend && <MetricRow label="Landing page conversion" value={totals ? ratio(total.fromAds, totals.lpv, 1) : "—"} hint="Registrants from ads ÷ landing page views" />}
+            <MetricRow label="Registrants from ads" value={n(total.fromAds)} hint="Clicked a paid ad" accent={!spend} />
+            {spend && <MetricRow label="Cost per registrant" value={costPer(total.fromAds)} hint="Ad spend ÷ registrants from ads" />}
+          </MetricGroup>
+          {(tracksCalls || tracksVip) && (
+            <MetricGroup title="After registering">
+              {tracksCalls && <MetricRow label="Calls booked from ads" value={n(total.callsFromAds)} hint="Booked on or after the webinar day" />}
+              {spend && tracksCalls && <MetricRow label="Cost per call booked" value={costPer(total.callsFromAds)} hint="Ad spend ÷ calls booked from ads" />}
+              {tracksVip && <MetricRow label="VIP purchases from ads" value={n(total.vipsFromAds)} hint="Bought the VIP upgrade" />}
+              {spend && tracksVip && <MetricRow label="Cost per VIP purchase" value={costPer(total.vipsFromAds)} hint="Ad spend ÷ VIP purchases from ads" />}
+            </MetricGroup>
+          )}
+
+          <section className="card p-5 sm:p-6">
+            <h2 className="mb-5 text-[17px] font-bold tracking-[-0.01em] text-ink">By ad</h2>
+            {adRows.length === 0 ? (
+              <Empty>No ad registrants or spend match these filters yet.</Empty>
+            ) : (
+              <BreakdownTable rows={adRows} columns={adColumns} firstLabel="Ad" selected={filters.ad} onSelect={toggle("ad")} />
+            )}
+            <p className="mt-5 text-[12.5px] text-muted">
+              Tap an ad to filter everything by it. Ads are named as in Trakyo, and only registrants with a paid UTM count as coming from an ad.
+            </p>
+          </section>
+        </>
       )}
-
-      {/* Breakdown */}
-      <section className="card p-5 sm:p-6">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-ink">Where registrants came from</h2>
-          <div role="tablist" aria-label="Break down by" className="flex w-full flex-wrap gap-1 rounded-[20px] bg-canvas p-1 ring-1 ring-line sm:w-auto sm:rounded-full">
-            {DIMENSIONS.map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={dimension === key}
-                onClick={() => setDimension(key)}
-                className={`cursor-pointer rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition ${
-                  dimension === key ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-line" : "text-muted hover:text-ink"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {shown.length === 0 ? (
-          <p className="rounded-2xl bg-canvas px-5 py-10 text-center text-[14px] text-muted ring-1 ring-line">
-            No registrants match these filters yet.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[280px_1fr]">
-            <Donut slices={slices} total={shown.length} selected={filters[dimension]} onSelect={toggleSlice} />
-            <BreakdownTable
-              slices={tableSlices}
-              total={shown.length}
-              selected={filters[dimension]}
-              onSelect={toggleSlice}
-              money={money}
-              currency={currency}
-              showSpend={showSpend}
-              showVip={tracksVip}
-              showCalls={tracksCalls}
-            />
-          </div>
-        )}
-        <p className="mt-5 text-[12.5px] text-muted">
-          Tap a slice or row to filter by it. Sources come from Trakyo, or from UTMs where Trakyo has nothing. Registrants with neither show as {NOT_SET}. Ads are named as in Trakyo.
-        </p>
-      </section>
 
       <a
         href={ghlUrl}
@@ -420,33 +503,40 @@ function Select({ label, value, onChange, children }: { label: string; value: st
   );
 }
 
-/** One headline metric as a line: name and how it's worked out on the left, the number on the right. */
-function MetricRow({ label, value, hint }: { label: string; value: number | string; hint: string }) {
+/** A titled list of metrics, one per row. */
+function MetricGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-3 text-[13px] font-semibold tracking-[0.02em] text-muted uppercase">{title}</h2>
+      <div className="card divide-y divide-line px-5 sm:px-6">{children}</div>
+    </section>
+  );
+}
+
+/** One metric as a row: name and how it's worked out on the left, the number on the right. `accent` makes it the group's lead number. */
+function MetricRow({ label, value, hint, accent = false }: { label: string; value: string; hint: string; accent?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4 py-4">
       <div className="min-w-0">
         <p className="text-[15px] font-semibold text-ink">{label}</p>
         <p className="mt-0.5 text-[12.5px] text-faint">{hint}</p>
       </div>
-      <p className="shrink-0 text-[26px] leading-none font-bold tracking-[-0.02em] text-ink tabular-nums">{value.toLocaleString("en-GB")}</p>
+      <p className={`shrink-0 text-right leading-none font-bold tracking-[-0.02em] text-ink tabular-nums ${accent ? "text-[30px]" : "text-[26px]"}`}>{value}</p>
     </div>
   );
 }
 
-function Stat({ label, value, hint, accent = false }: { label: string; value: number | string; hint: string; accent?: boolean }) {
-  return (
-    <div className={`rounded-[20px] p-5 ${accent ? "bg-ink-2 text-white" : "card"}`}>
-      <p className={`text-[12.5px] font-semibold ${accent ? "text-white/55" : "text-muted"}`}>{label}</p>
-      <p className="mt-2 text-[38px] leading-none font-bold tracking-[-0.03em] tabular-nums">{value.toLocaleString("en-GB")}</p>
-      <p className={`mt-2 text-[12.5px] ${accent ? "text-white/45" : "text-faint"}`}>{hint}</p>
-    </div>
-  );
+function Empty({ children }: { children: ReactNode }) {
+  return <p className="rounded-2xl bg-canvas px-5 py-10 text-center text-[14px] text-muted ring-1 ring-line">{children}</p>;
 }
 
-type Slice = { label: string; count: number; colour: string };
-type Counts = { fromAds: number; vips: number; vipsFromAds: number; calls: number; callsFromAds: number };
-const NO_COUNTS: Counts = { fromAds: 0, vips: 0, vipsFromAds: 0, calls: 0, callsFromAds: 0 };
-type Money = Counts & { meta: MetaTotals | null };
+type Slice = { label: string; count: number; colour?: string };
+type Counts = { registrants: number; fromAds: number; attended: number; vips: number; vipsFromAds: number; calls: number; callsFromAds: number };
+const NO_COUNTS: Counts = { registrants: 0, fromAds: 0, attended: 0, vips: 0, vipsFromAds: 0, calls: 0, callsFromAds: 0 };
+const addCounts = (a: Counts, b: Counts): Counts =>
+  Object.fromEntries(Object.keys(a).map((k) => [k, a[k as keyof Counts] + b[k as keyof Counts]])) as Counts;
+type Row = Slice & { counts: Counts; meta: MetaTotals | null };
+type Column = { label: string; sort: (r: Row) => number | null; show: (r: Row) => string; strong?: boolean; muted?: boolean };
 type MetaTotals = { amount: number; impressions: number; linkClicks: number; lpv: number };
 const NO_META: MetaTotals = { amount: 0, impressions: 0, linkClicks: 0, lpv: 0 };
 const sumMeta = (rows: SpendRow[], keep: (r: SpendRow) => boolean): MetaTotals =>
@@ -535,83 +625,56 @@ function Donut({ slices, total, selected, onSelect }: { slices: Slice[]; total: 
 }
 
 /**
- * Every slice as a row: colour, name, count and share, plus spend, VIP purchases, calls booked and their costs where
- * there's spend behind the dimension. Doubles as the chart's legend and table view.
+ * Rows of a breakdown (a colour dot when the row has one, its name, then `columns`). Headings sort it.
+ * The name column keeps a readable width, so a wide table scrolls sideways rather than squeezing names.
  */
-type SortKey = "label" | "count" | "spend" | "cpm" | "ctr" | "lpv" | "lpConv" | "costReg" | "vips" | "vipRate" | "costVip" | "calls" | "callRate" | "costCall";
-
 function BreakdownTable({
-  slices,
-  total,
+  rows,
+  columns,
+  firstLabel = "Value",
   selected,
   onSelect,
-  money,
-  currency,
-  showSpend,
-  showVip,
-  showCalls,
 }: {
-  slices: Slice[];
-  total: number;
+  rows: Row[];
+  columns: Column[];
+  firstLabel?: string;
   selected: string;
   onSelect: (label: string) => void;
-  money: Record<string, Money>;
-  currency: string;
-  showSpend: boolean;
-  showVip: boolean;
-  showCalls: boolean;
 }) {
-  const cost = (m: Money | undefined, count: number | undefined) => (m?.meta == null || !count ? "—" : formatMoney(m.meta.amount / count, currency));
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
-  // Click a heading to sort by it (biggest first, A to Z for Value), again to flip, a third time to go back.
-  const sortBy = (key: SortKey) =>
+  // Click a heading to sort by it (biggest first, A to Z for the name), again to flip, a third time to go back.
+  const [sort, setSort] = useState<{ col: number; dir: "asc" | "desc" } | null>(null);
+  const sortBy = (col: number) =>
     setSort((cur) => {
-      const first = key === "label" ? "asc" : "desc";
-      if (cur?.key !== key) return { key, dir: first };
-      return cur.dir === first ? { key, dir: first === "asc" ? "desc" : "asc" } : null;
+      const first = col < 0 ? "asc" : "desc";
+      if (cur?.col !== col) return { col, dir: first };
+      return cur.dir === first ? { col, dir: first === "asc" ? "desc" : "asc" } : null;
     });
-  const valueOf = (s: Slice, key: SortKey): number | string | null => {
-    const m = money[s.label];
-    const t = m?.meta;
-    const per = (count: number | undefined) => (t == null || !count ? null : t.amount / count);
-    switch (key) {
-      case "label": return s.label;
-      case "count": return s.count;
-      case "spend": return t?.amount ?? null;
-      case "cpm": return t?.impressions ? t.amount / t.impressions : null;
-      case "ctr": return t?.impressions ? t.linkClicks / t.impressions : null;
-      case "lpv": return t?.lpv ?? null;
-      case "lpConv": return t?.lpv ? (m?.fromAds ?? 0) / t.lpv : null;
-      case "costReg": return per(m?.fromAds);
-      case "vips": return s.label === OTHER ? null : (m?.vips ?? 0);
-      case "vipRate": return s.label === OTHER || !s.count ? null : (m?.vips ?? 0) / s.count;
-      case "costVip": return per(m?.vipsFromAds);
-      case "calls": return s.label === OTHER ? null : (m?.calls ?? 0);
-      case "callRate": return s.label === OTHER || !s.count ? null : (m?.calls ?? 0) / s.count;
-      case "costCall": return per(m?.callsFromAds);
-    }
-  };
-  const rows = !sort
-    ? slices
-    : [...slices].sort((a, b) => {
+  const valueOf = (r: Row, col: number): number | string | null => (col < 0 ? r.label : r.label === OTHER ? null : columns[col].sort(r));
+  const sorted = !sort
+    ? rows
+    : [...rows].sort((a, b) => {
         // "Other" and rows with no value (a dash) stay at the bottom either way.
         const pin = Number(a.label === OTHER) - Number(b.label === OTHER);
         if (pin) return pin;
-        const va = valueOf(a, sort.key);
-        const vb = valueOf(b, sort.key);
+        const va = valueOf(a, sort.col);
+        const vb = valueOf(b, sort.col);
         if (va === null || vb === null) return Number(va === null) - Number(vb === null);
         const d = typeof va === "string" ? va.localeCompare(String(vb)) : va - (vb as number);
         return (sort.dir === "asc" ? d : -d) || b.count - a.count || a.label.localeCompare(b.label);
       });
-  const heading = (k: SortKey, label: string, className = "") => {
-    const on = sort?.key === k;
-    const right = k !== "label";
+  const heading = (col: number, label: string) => {
+    const on = sort?.col === col;
+    const right = col >= 0;
     return (
-      <th key={label} aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"} className={`pb-2 font-semibold whitespace-nowrap ${right ? "pl-3 text-right" : ""} ${className}`}>
+      <th
+        key={label}
+        aria-sort={on ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+        className={`pb-2 font-semibold whitespace-nowrap ${right ? "pl-4 text-right" : "pr-3"}`}
+      >
         <button
           type="button"
-          onClick={() => sortBy(k)}
-          className={`inline-flex items-center gap-1 transition hover:text-ink ${on ? "text-ink" : ""} ${right ? "flex-row-reverse" : ""}`}
+          onClick={() => sortBy(col)}
+          className={`inline-flex cursor-pointer items-center gap-1 transition hover:text-ink ${on ? "text-ink" : ""} ${right ? "flex-row-reverse" : ""}`}
         >
           {label}
           <span aria-hidden className={`text-[10px] ${on ? "" : "invisible"}`}>{on && sort.dir === "asc" ? "▲" : "▼"}</span>
@@ -619,60 +682,38 @@ function BreakdownTable({
       </th>
     );
   };
-  const td = "py-2.5 pl-3 text-right tabular-nums whitespace-nowrap";
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[14px]">
+    <div className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
+      <table className="w-full min-w-max text-[14px]">
         <thead>
           <tr className="border-b border-line text-left text-[12px] font-semibold text-muted">
-            {heading("label", "Value")}
-            {heading("count", "Registrants")}
-            {heading("count", "Share", "w-16")}
-            {showSpend && heading("spend", "Spend")}
-            {showSpend && heading("cpm", "CPM")}
-            {showSpend && heading("ctr", "Link CTR")}
-            {showSpend && heading("lpv", "LP views")}
-            {showSpend && heading("lpConv", "LP conv.")}
-            {showSpend && heading("costReg", "Cost / reg")}
-            {showVip && heading("vips", "VIP")}
-            {showVip && heading("vipRate", "VIP %")}
-            {showSpend && showVip && heading("costVip", "Cost / VIP")}
-            {showCalls && heading("calls", "Calls")}
-            {showCalls && heading("callRate", "Call %")}
-            {showSpend && showCalls && heading("costCall", "Cost / call")}
+            {heading(-1, firstLabel)}
+            {columns.map((c, i) => heading(i, c.label))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((s) => {
-            const clickable = s.label !== OTHER;
-            const isSelected = selected === s.label;
-            const m = money[s.label];
+          {sorted.map((r) => {
+            const clickable = r.label !== OTHER;
             return (
               <tr
-                key={s.label}
-                onClick={clickable ? () => onSelect(s.label) : undefined}
-                className={`border-b border-line/70 last:border-0 ${clickable ? "cursor-pointer hover:bg-canvas" : ""} ${isSelected ? "bg-brand-soft/60" : ""}`}
+                key={r.label}
+                onClick={clickable ? () => onSelect(r.label) : undefined}
+                className={`border-b border-line/70 last:border-0 ${clickable ? "cursor-pointer hover:bg-canvas" : ""} ${selected === r.label ? "bg-brand-soft/60" : ""}`}
               >
                 <td className="py-2.5 pr-3">
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <span className="size-3 shrink-0 rounded-full" style={{ background: s.colour }} />
-                    <span className={`min-w-0 break-all ${isEmpty(s.label) || s.label === OTHER ? "text-muted" : "font-medium text-ink"}`}>{s.label}</span>
+                  <span className="flex w-[clamp(10rem,22vw,18rem)] items-center gap-2.5">
+                    {r.colour && <span className="size-3 shrink-0 rounded-full" style={{ background: r.colour }} />}
+                    <span className={`min-w-0 break-words ${isEmpty(r.label) || r.label === OTHER ? "text-muted" : "font-medium text-ink"}`}>{r.label}</span>
                   </span>
                 </td>
-                <td className={`${td} font-semibold text-ink`}>{s.count.toLocaleString("en-GB")}</td>
-                <td className={`${td} text-muted`}>{pct(s.count, total)}</td>
-                {showSpend && <td className={`${td} text-ink`}>{m?.meta == null ? "—" : formatMoney(m.meta.amount, currency)}</td>}
-                {showSpend && <td className={`${td} text-ink`}>{m?.meta == null ? "—" : perThousand(m.meta, currency)}</td>}
-                {showSpend && <td className={`${td} text-muted`}>{m?.meta == null ? "—" : ratio(m.meta.linkClicks, m.meta.impressions, 2)}</td>}
-                {showSpend && <td className={`${td} text-ink`}>{m?.meta == null ? "—" : m.meta.lpv.toLocaleString("en-GB")}</td>}
-                {showSpend && <td className={`${td} text-muted`}>{m?.meta == null ? "—" : ratio(m.fromAds, m.meta.lpv, 1)}</td>}
-                {showSpend && <td className={`${td} text-ink`}>{cost(m, m?.fromAds)}</td>}
-                {showVip && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.vips ?? 0).toLocaleString("en-GB")}</td>}
-                {showVip && <td className={`${td} text-muted`}>{s.label === OTHER ? "—" : uptake(m?.vips ?? 0, s.count)}</td>}
-                {showSpend && showVip && <td className={`${td} text-ink`}>{cost(m, m?.vipsFromAds)}</td>}
-                {showCalls && <td className={`${td} text-ink`}>{s.label === OTHER ? "—" : (m?.calls ?? 0).toLocaleString("en-GB")}</td>}
-                {showCalls && <td className={`${td} text-muted`}>{s.label === OTHER ? "—" : uptake(m?.calls ?? 0, s.count)}</td>}
-                {showSpend && showCalls && <td className={`${td} text-ink`}>{cost(m, m?.callsFromAds)}</td>}
+                {columns.map((c) => (
+                  <td
+                    key={c.label}
+                    className={`py-2.5 pl-4 text-right whitespace-nowrap tabular-nums ${c.strong ? "font-semibold text-ink" : c.muted ? "text-muted" : "text-ink"}`}
+                  >
+                    {r.label === OTHER && c.label !== "Registrants" && c.label !== "Share" ? "—" : c.show(r)}
+                  </td>
+                ))}
               </tr>
             );
           })}
