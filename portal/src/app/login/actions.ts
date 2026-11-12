@@ -9,6 +9,7 @@ import { requestCode, verifyCode } from "@/lib/signin";
 export type LoginState = { step: "email" | "code"; email?: string; error?: string; resent?: boolean } | undefined;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const BUSY = "We couldn't reach our system just now. Please try again in a minute.";
 
 async function clientIp() {
   return (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -22,7 +23,10 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (!EMAIL_RE.test(email)) return { step: "email", email, error: "Please enter a valid email address." };
 
   if (step === "email" || formData.get("resend")) {
-    const result = await requestCode(email, await clientIp());
+    const result = await requestCode(email, await clientIp()).catch((err) => {
+      console.error("Requesting a sign-in code failed", err);
+      return { ok: false as const, error: BUSY };
+    });
     if (!result.ok) return { step, email, error: result.error };
     return { step: "code", email, resent: step === "code" };
   }
@@ -30,7 +34,10 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const code = String(formData.get("code") ?? "").replace(/\D/g, "");
   if (code.length !== 6) return { step: "code", email, error: "Please enter the 6-digit code from the email." };
 
-  const result = await verifyCode(email, code, await clientIp());
+  const result = await verifyCode(email, code, await clientIp()).catch((err) => {
+    console.error("Checking a sign-in code failed", err);
+    return { ok: false as const, error: BUSY };
+  });
   if (!result.ok) return { step: "code", email, error: result.error };
 
   if (result.account.kind === "admin") {

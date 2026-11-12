@@ -142,7 +142,7 @@ function AdCard({
         dragging ? "opacity-40" : ""
       } cursor-grab active:cursor-grabbing`}
     >
-      <Link href={`/ads/${ad.id}`} draggable={false} className="block p-3.5">
+      <Link href={`/ads/${ad.id}`} prefetch={false} draggable={false} className="block p-3.5">
         <p className="text-[14px] leading-snug font-semibold break-words text-ink">{ad.name}</p>
         {(ad.format || ad.lengthSeconds) && (
           <p className="mt-1 text-[12.5px] text-muted">{[ad.format, ad.lengthSeconds && `${ad.lengthSeconds}s`].filter(Boolean).join(" · ")}</p>

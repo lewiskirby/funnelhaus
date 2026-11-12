@@ -20,6 +20,12 @@ export const ADS_DS = process.env.NOTION_ADS_DS ?? "a3304bbf-db00-83b0-b86f-870d
 
 // ── HTTP ────────────────────────────────────────────
 
+class NotionError extends Error {
+  constructor(readonly status: number) {
+    super("Notion request failed");
+  }
+}
+
 async function notion<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: init.method ?? "GET",
@@ -34,9 +40,38 @@ async function notion<T>(path: string, init: { method?: string; body?: unknown }
   if (!res.ok) {
     // Log details server-side; callers show a friendly message.
     console.error(`Notion ${init.method ?? "GET"} ${path} failed: ${res.status} ${await res.text()}`);
-    throw new Error("Notion request failed");
+    throw new NotionError(res.status);
   }
   return res.json() as Promise<T>;
+}
+
+// ── Sign-in checks ──────────────────────────────────
+// Every request re-checks the signed-in person's Portal Users row and their
+// client page. Those two pages are remembered for a minute, so a burst of
+// clicks doesn't hit Notion's rate limit (about 3 requests a second). If Notion
+// is busy or down, the last answer is used instead of signing people out.
+
+const ACCESS_TTL_MS = 60_000;
+const ACCESS_STALE_MS = 24 * 60 * 60_000; // how long a last answer can stand in while Notion fails
+const accessPages = new Map<string, { at: number; page: Page | null }>();
+
+async function getAccessPage(id: string): Promise<Page | null> {
+  const key = normalise(id);
+  const hit = accessPages.get(key);
+  if (hit && Date.now() - hit.at < ACCESS_TTL_MS) return hit.page;
+  try {
+    const page = await notion<Page>(`/pages/${id}`);
+    accessPages.set(key, { at: Date.now(), page });
+    return page;
+  } catch (err) {
+    // A page that doesn't exist (or isn't shared with the integration) is a real "no".
+    if (err instanceof NotionError && (err.status === 400 || err.status === 404)) {
+      accessPages.set(key, { at: Date.now(), page: null });
+      return null;
+    }
+    if (hit && Date.now() - hit.at < ACCESS_STALE_MS) return hit.page;
+    throw err;
+  }
 }
 
 type FileRef = { type: "external" | "file"; external?: { url: string }; file?: { url: string } };
@@ -136,8 +171,8 @@ export async function listClients(): Promise<Client[]> {
 
 export const getClientPage = cache(async (clientId: string): Promise<Client | null> => {
   try {
-    const page = await notion<Page>(`/pages/${clientId}`);
-    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(CLIENTS_DS)) return null;
+    const page = await getAccessPage(clientId);
+    if (!page || page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(CLIENTS_DS)) return null;
     return toClient(page);
   } catch {
     return null;
@@ -179,8 +214,8 @@ export async function findActiveUsersByEmail(email: string): Promise<PortalUser[
 /** A single user, but only if the page really lives in Portal Users. */
 export const getPortalUser = cache(async (userId: string): Promise<PortalUser | null> => {
   try {
-    const page = await notion<Page>(`/pages/${userId}`);
-    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(USERS_DS)) return null;
+    const page = await getAccessPage(userId);
+    if (!page || page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(USERS_DS)) return null;
     return toPortalUser(page);
   } catch {
     return null;
@@ -232,6 +267,7 @@ export async function createPortalUserInNotion(user: {
 /** Writes only the Status property. */
 export async function setPortalUserStatusInNotion(userId: string, status: "Active" | "Removed"): Promise<void> {
   await notion(`/pages/${userId}`, { method: "PATCH", body: { properties: { Status: { select: { name: status } } } } });
+  accessPages.delete(normalise(userId)); // takes effect on their next click
 }
 
 /** Writes only "Last signed in". */

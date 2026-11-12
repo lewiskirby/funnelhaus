@@ -40,7 +40,8 @@ and can view every client.
 
 - **Add someone:** add a row in Portal Users, or the client adds them from the portal's Team page.
 - **Add a FunnelHaus team member:** add a row with Role FunnelHaus team, or use the FunnelHaus team section of the Team page (admins only).
-- **Remove someone:** set their Status to Removed (or remove them on the Team page). They're signed out on their next click.
+- **Remove someone:** set their Status to Removed in Notion (they're signed out within a minute) or remove them on the Team page (signed out on their next click).
+- Each person's Portal Users row and client page are re-checked at most once a minute per server, so a burst of clicks can't hit Notion's rate limit. If Notion is busy or down, the last answer is used rather than signing people out, and sign-in shows "Please try again in a minute" rather than an error page. Long lists (ads, tasks) don't preload their links for the same reason.
 - Code requests and wrong guesses are rate-limited per email and per IP address, shared across all servers via Upstash.
 
 ## Commands

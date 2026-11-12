@@ -99,7 +99,7 @@ export default async function HomePage() {
               {shown.map((task) => (
                 <li key={task.id} className="group flex items-center gap-4 rounded-xl px-2 transition hover:bg-canvas">
                   <StatusToggle taskId={task.id} status={task.status} name={task.name} />
-                  <Link href={`/tasks/${task.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-3">
+                  <Link href={`/tasks/${task.id}`} prefetch={false} className="flex min-w-0 flex-1 items-center gap-4 py-3">
                     <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
                       {task.icon && <span className="mr-2">{task.icon}</span>}
                       {task.name}
