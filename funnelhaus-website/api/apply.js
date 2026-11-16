@@ -1,7 +1,7 @@
 // Receives applications from funnelhaus.co/careers/<slug> and saves them to
 // the 🙋 Applicants database in Notion, linked to the job post (CV attached).
 
-const { findLiveJob, uploadFile, createApplicant } = require('./_notion');
+const { findJob, uploadFile, createApplicant } = require('./_notion');
 
 const LIMITS = { name: 100, email: 320, phone: 40, link: 500, loom: 500, availability: 3, source: 500, message: 5000 };
 const REQUIRED = ['name', 'email', 'phone', 'loom', 'availability', 'source'];
@@ -94,7 +94,8 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const job = await findLiveJob(slug);
+    // Filled posts still take applications for future hiring.
+    const job = await findJob(slug, ['Live', 'Filled']);
     if (!job) return fail(400, "This role isn't taking applications any more.");
     const cvName = hasCv ? (cv.name || 'CV').slice(0, 100) : undefined;
     const cvUploadId = hasCv ? await uploadFile(Buffer.from(await cv.arrayBuffer()), cvName, cv.type) : undefined;

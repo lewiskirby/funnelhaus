@@ -29,8 +29,8 @@ const plain = (prop) => ((prop && (prop.title || prop.rich_text)) || []).map((t)
 const selected = (prop) => (prop && prop.select && prop.select.name) || '';
 const multi = (prop) => ((prop && prop.multi_select) || []).map((o) => o.name).join(', ');
 
-/** The Live job post with this slug, or null. Anything not Live stays hidden. */
-async function findLiveJob(slug) {
+/** The job post with this slug whose Status is one of `statuses`, or null. */
+async function findJob(slug, statuses) {
   if (!SLUG_RE.test(slug) || slug.length > 100) return null;
   const res = await notion(`/data_sources/${JOBS_DS}/query`, {
     method: 'POST',
@@ -38,7 +38,7 @@ async function findLiveJob(slug) {
       filter: {
         and: [
           { property: 'Slug', rich_text: { equals: slug } },
-          { property: 'Status', select: { equals: 'Live' } },
+          { or: statuses.map((name) => ({ property: 'Status', select: { equals: name } })) },
         ],
       },
       page_size: 1,
@@ -50,6 +50,7 @@ async function findLiveJob(slug) {
   return {
     id: page.id,
     slug,
+    status: selected(p.Status),
     // "Title for landing page" is the public headline; Title is the fallback.
     title: plain(p['Title for landing page']) || plain(p.Title) || 'Join the team',
     loomUrl: (p['Loom URL'] && p['Loom URL'].url) || '',
@@ -147,4 +148,4 @@ async function createApplicant(job, { name, email, phone, link, loom, availabili
   });
 }
 
-module.exports = { SLUG_RE, findLiveJob, pageContent, uploadFile, createApplicant };
+module.exports = { SLUG_RE, findJob, pageContent, uploadFile, createApplicant };

@@ -1,8 +1,9 @@
 // Renders funnelhaus.co/careers/<slug> from the 💼 Job Posts database in Notion.
-// Only posts with Status = Live are shown; everything else is a 404.
+// Posts with Status = Live or Filled are shown (Filled adds a "this job has been filled"
+// note but still takes applications); everything else is a 404.
 // Pages are cached for a minute, so changes in Notion appear within about 60s.
 
-const { findLiveJob, pageContent } = require('./_notion');
+const { findJob, pageContent } = require('./_notion');
 
 // ─── Helpers ────────────────────────────────────────
 
@@ -175,6 +176,8 @@ h1{font-size:clamp(30px,5vw,50px);font-weight:700;letter-spacing:-.03em;line-hei
 .content details>*+*{margin-top:10px}
 .callout{display:flex;gap:12px;background:var(--off-white);border-radius:16px;padding:16px 18px}
 .callout-icon{font-size:20px;line-height:1.4}
+.filled-note{margin-top:32px;border:1px solid var(--red-faint)}
+.filled-note p{margin:0}
 .cta-end{text-align:center;margin-top:40px}
 .modal{position:fixed;inset:0;z-index:50;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;background:rgba(17,17,17,.55);overflow-y:auto;-webkit-overflow-scrolling:touch}
 .modal:target,.modal.open{display:flex}
@@ -238,6 +241,8 @@ const SCRIPT = `
   });
 })();`;
 
+const FILLED_NOTE = "This job has now been filled, but we will likely be hiring again in the future. If you'd like to be considered for that, please fill out an application.";
+
 const SUCCESS = `<div class="success" role="status"><span class="tick">✓</span><div><strong>Application sent</strong>Thanks for applying. We'll be in touch by email.</div></div>`;
 
 function page({ title, description, canonical, body, status = 200 }) {
@@ -297,6 +302,7 @@ function jobPage(job, blocks, applied) {
     canonical: `https://funnelhaus.co/careers/${job.slug}`,
     body: `${nav()}
 <main class="wrap">
+  ${job.status === 'Filled' ? `<div class="callout filled-note" role="note"><span class="callout-icon">📌</span><div><p>${FILLED_NOTE}</p></div></div>` : ''}
   <header class="hero">
     <h1>${esc(job.title)}</h1>
     ${job.details.length ? `<div class="details">${job.details.map(([label, value]) => `<p><strong>${esc(label)}:</strong> ${esc(value)}</p>`).join('')}</div>` : ''}
@@ -337,7 +343,7 @@ module.exports = async (req, res) => {
   let job = null;
   let blocks = [];
   try {
-    job = await findLiveJob(slug);
+    job = await findJob(slug, ['Live', 'Filled']);
     if (job) blocks = await pageContent(job.id);
   } catch (err) {
     console.error('Careers page failed', err);
