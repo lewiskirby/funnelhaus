@@ -5,7 +5,8 @@ import "server-only";
 import { cache } from "react";
 import { HIDDEN_STATUSES } from "@/lib/ads";
 import { offsetLabel } from "@/lib/calendar";
-import type { AdCreative, BlockEdits, Client, ClientEvent, ClientIcon, ContentBlock, EditableBlock, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
+import { HIDDEN_CONTENT_STATUSES } from "@/lib/content";
+import type { AdCreative, BlockEdits, Client, ClientEvent, ClientIcon, ContentBlock, ContentPost, EditableBlock, Freebie, LaunchTask, PortalUser, RichText, TableBlock, TaskRecord, TaskStatus } from "@/lib/types";
 
 const API = "https://api.notion.com/v1";
 const VERSION = "2025-09-03";
@@ -17,6 +18,8 @@ export const TRACKER_DS = process.env.NOTION_TRACKER_DS ?? "3c104bbf-db00-802e-b
 export const USERS_DS = process.env.NOTION_USERS_DS ?? "cbac4674-b2ff-472e-8057-dfe82c253644";
 export const WEBINARS_DS = process.env.NOTION_WEBINARS_DS ?? "40104bbf-db00-8087-a129-000b0c353098";
 export const ADS_DS = process.env.NOTION_ADS_DS ?? "a3304bbf-db00-83b0-b86f-870de7f1283e";
+export const CONTENT_DS = process.env.NOTION_CONTENT_DS ?? "41b04bbf-db00-811b-a9a8-000b87fae8ba";
+export const RESOURCES_DS = process.env.NOTION_RESOURCES_DS ?? "b348c39d-8923-490d-8a9c-d0dce198e8a7";
 
 // ── HTTP ────────────────────────────────────────────
 
@@ -523,6 +526,83 @@ export async function getAdPage(adId: string): Promise<AdRecord | null> {
     const page = await notion<Page>(`/pages/${adId}`);
     if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(ADS_DS)) return null;
     return toAd(page);
+  } catch {
+    return null;
+  }
+}
+
+// ── Organic Content ─────────────────────────────────
+// Fields used: Name (title), Client (relation), Status (status), Post type, Format,
+// Funnel stage, CTA, CTA keyword, Freebie (relation to Resources to Use in
+// Conversations), Due date, File link, Inspiration. Unused posts are never shown.
+
+export type ContentRecord = ContentPost & { clientIds: string[]; freebieIds: string[] };
+
+function toContentPost(page: Page): ContentRecord | null {
+  const p = page.properties;
+  const stage = option(p["Status"]) || "Not started";
+  if (HIDDEN_CONTENT_STATUSES.includes(stage)) return null;
+  return {
+    id: page.id,
+    name: text(p["Name"]) || "Untitled post",
+    stage,
+    postType: option(p["Post type"]) || undefined,
+    format: option(p["Format"]) || undefined,
+    funnelStage: option(p["Funnel stage"]) || undefined,
+    cta: option(p["CTA"]) || undefined,
+    ctaKeyword: text(p["CTA keyword"]) || undefined,
+    due: p["Due date"]?.date?.start ?? undefined,
+    fileUrl: safeUrl(p["File link"]?.url),
+    inspirationUrl: safeUrl(p["Inspiration"]?.url),
+    clientIds: (p["Client"]?.relation ?? []).map((r) => r.id),
+    freebieIds: (p["Freebie"]?.relation ?? []).map((r) => r.id),
+  };
+}
+
+let contentStatusCache: { at: number; statuses: Promise<string[]> } | undefined;
+
+/** The Status options of Organic Content in Notion's order, minus the hidden ones. Kept for a minute. */
+export async function queryContentStatuses(): Promise<string[]> {
+  if (contentStatusCache && Date.now() - contentStatusCache.at < CONTENT_TTL_MS) return contentStatusCache.statuses;
+  const statuses = notion<{ properties: Record<string, { status?: { options: { name: string }[] } }> }>(`/data_sources/${CONTENT_DS}`).then((ds) =>
+    (ds.properties["Status"]?.status?.options ?? []).map((o) => o.name).filter((n) => !HIDDEN_CONTENT_STATUSES.includes(n)),
+  );
+  contentStatusCache = { at: Date.now(), statuses };
+  statuses.catch(() => (contentStatusCache = undefined)); // don't keep failures
+  return statuses;
+}
+
+/** Sets a post's Status (a Notion status property). */
+export async function setContentStatusInNotion(postId: string, status: string): Promise<void> {
+  await notion(`/pages/${postId}`, { method: "PATCH", body: { properties: { Status: { status: { name: status } } } } });
+}
+
+/** This client's organic content, oldest first. */
+export async function queryClientContent(clientId: string): Promise<ContentRecord[]> {
+  const pages = await queryAll(CONTENT_DS, {
+    filter: { property: "Client", relation: { contains: clientId } },
+    sorts: [{ timestamp: "created_time", direction: "ascending" }],
+  });
+  return pages.filter((page) => !page.in_trash).map(toContentPost).filter((post): post is ContentRecord => post !== null);
+}
+
+/** A single post, but only if the page really lives in Organic Content and isn't hidden. */
+export async function getContentPage(postId: string): Promise<ContentRecord | null> {
+  try {
+    const page = await notion<Page>(`/pages/${postId}`);
+    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(CONTENT_DS)) return null;
+    return toContentPost(page);
+  } catch {
+    return null;
+  }
+}
+
+/** A freebie's name and link, only if the page lives in Resources to Use in Conversations. Notes are never read. */
+export async function getFreebiePage(resourceId: string): Promise<Freebie | null> {
+  try {
+    const page = await notion<Page>(`/pages/${resourceId}`);
+    if (page.in_trash || page.archived || normalise(page.parent?.data_source_id ?? "") !== normalise(RESOURCES_DS)) return null;
+    return { name: text(page.properties["Name"]) || "Freebie", url: safeUrl(page.properties["Link"]?.url) };
   } catch {
     return null;
   }

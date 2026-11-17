@@ -60,6 +60,27 @@ export interface AdCreative {
   driveUrl?: string;
 }
 
+// A row in Organic Content: an Instagram reel, carousel, story or image post.
+export interface ContentPost {
+  id: string;
+  name: string;
+  stage: string; // Status in Notion
+  postType?: string; // Reel, Carousel, Story, Single image
+  format?: string; // Talking head, B-roll…
+  funnelStage?: string; // Top, Middle, Bottom
+  cta?: string; // None, Comment keyword, DM keyword, Link in bio, Follow
+  ctaKeyword?: string;
+  due?: string; // ISO date
+  fileUrl?: string;
+  inspirationUrl?: string;
+}
+
+/** A resource from "Resources to Use in Conversations" that a post's keyword sends. */
+export interface Freebie {
+  name: string;
+  url?: string;
+}
+
 // An entry in the Client Events database (webinars, calls, launches…).
 export interface ClientEvent {
   id: string;

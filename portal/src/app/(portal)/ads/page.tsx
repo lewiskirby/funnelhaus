@@ -5,8 +5,9 @@ import { Icon } from "@/components/ui";
 import { columnFor } from "@/lib/ads";
 import { getAdStatuses, getClientAds, getFilmingGuide } from "@/lib/data";
 import { getSession, requireClient } from "@/lib/session";
-import { AdBoard } from "./ad-board";
-import { BoardScroller } from "./board-scroller";
+import { Board } from "@/components/board";
+import { BoardScroller } from "@/components/board-scroller";
+import { moveAd } from "./actions";
 import { FilmingGuide } from "./filming-guide";
 
 export const metadata: Metadata = { title: "Ad creatives" };
@@ -57,7 +58,12 @@ export default async function AdsPage() {
 
       {/* Board: columns scroll sideways on smaller screens */}
       <BoardScroller>
-        <AdBoard ads={ads} columns={columns} />
+        <Board
+          items={ads.map((ad) => ({ ...ad, meta: [ad.format, ad.lengthSeconds && `${ad.lengthSeconds}s`].filter(Boolean).join(" · ") || undefined }))}
+          columns={columns}
+          hrefBase="/ads"
+          moveAction={moveAd}
+        />
       </BoardScroller>
     </div>
   );

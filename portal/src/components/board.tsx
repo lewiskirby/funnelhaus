@@ -3,8 +3,17 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { dueLabel, type AdColumn } from "@/lib/ads";
-import type { AdCreative, AdStage } from "@/lib/types";
-import { moveAd } from "./actions";
+
+/** A card on a board: an ad or a piece of organic content. */
+export type BoardItem = {
+  id: string;
+  name: string;
+  stage: string;
+  due?: string;
+  meta?: string; // small line under the name, e.g. "Reel · B-roll"
+  tag?: string; // a highlighted chip, e.g. the CTA keyword
+};
+type MoveAction = (id: string, stage: string) => Promise<{ error?: string }>;
 
 const TONE = {
   overdue: "bg-brand-soft text-brand",
@@ -13,25 +22,26 @@ const TONE = {
 } as const;
 
 /**
- * The ads board. Drag a card to another column (or use "Move to" on phones) and
- * its Status changes in Notion. The card moves straight away and moves back if saving fails.
+ * A board with one column per Notion Status (Ads, Content). Drag a card to another column
+ * (or use "Move to" on phones) and its Status changes in Notion. The card moves straight
+ * away and moves back if saving fails. `hrefBase` is where a card opens, e.g. "/ads".
  */
-export function AdBoard({ ads, columns }: { ads: AdCreative[]; columns: AdColumn[] }) {
-  const [moved, setMoved] = useState<Record<string, AdStage>>({});
+export function Board({ items: ads, columns, hrefBase, moveAction }: { items: BoardItem[]; columns: AdColumn[]; hrefBase: string; moveAction: MoveAction }) {
+  const [moved, setMoved] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<AdStage | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  const stageOf = (ad: AdCreative) => moved[ad.id] ?? ad.stage;
+  const stageOf = (ad: BoardItem) => moved[ad.id] ?? ad.stage;
 
-  function move(ad: AdCreative, stage: AdStage) {
+  function move(ad: BoardItem, stage: string) {
     const from = stageOf(ad);
     if (from === stage) return;
     setError(null);
     setMoved((m) => ({ ...m, [ad.id]: stage }));
     startTransition(async () => {
-      const result = await moveAd(ad.id, stage).catch(() => ({ error: "We couldn't move that ad. Please try again." }));
+      const result = await moveAction(ad.id, stage).catch(() => ({ error: "We couldn't move that. Please try again." }));
       if (result.error) {
         setMoved((m) => ({ ...m, [ad.id]: from }));
         setError(result.error);
@@ -65,7 +75,7 @@ export function AdBoard({ ads, columns }: { ads: AdCreative[]; columns: AdColumn
               }}
               onDrop={(e) => {
                 e.preventDefault();
-                const ad = ads.find((a) => a.id === e.dataTransfer.getData("text/x-ad-id"));
+                const ad = ads.find((a) => a.id === e.dataTransfer.getData("text/x-board-id"));
                 if (ad) move(ad, column.stage);
                 setOver(null);
                 setDragging(null);
@@ -88,9 +98,10 @@ export function AdBoard({ ads, columns }: { ads: AdCreative[]; columns: AdColumn
                   </li>
                 )}
                 {cards.map((ad) => (
-                  <AdCard
+                  <Card
                     key={ad.id}
                     ad={ad}
+                    href={`${hrefBase}/${ad.id}`}
                     stage={stageOf(ad)}
                     dragging={dragging === ad.id}
                     onDragStart={() => setDragging(ad.id)}
@@ -111,8 +122,9 @@ export function AdBoard({ ads, columns }: { ads: AdCreative[]; columns: AdColumn
   );
 }
 
-function AdCard({
+function Card({
   ad,
+  href,
   stage,
   dragging,
   onDragStart,
@@ -120,20 +132,21 @@ function AdCard({
   columns,
   onMove,
 }: {
-  ad: AdCreative;
-  stage: AdStage;
+  ad: BoardItem;
+  href: string;
+  stage: string;
   dragging: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
   columns: AdColumn[];
-  onMove: (stage: AdStage) => void;
+  onMove: (stage: string) => void;
 }) {
   const due = ad.due ? dueLabel(ad.due) : null;
   return (
     <li
       draggable
       onDragStart={(e) => {
-        e.dataTransfer.setData("text/x-ad-id", ad.id);
+        e.dataTransfer.setData("text/x-board-id", ad.id);
         e.dataTransfer.effectAllowed = "move";
         onDragStart();
       }}
@@ -142,14 +155,13 @@ function AdCard({
         dragging ? "opacity-40" : ""
       } cursor-grab active:cursor-grabbing`}
     >
-      <Link href={`/ads/${ad.id}`} prefetch={false} draggable={false} className="block p-3.5">
+      <Link href={href} prefetch={false} draggable={false} className="block p-3.5">
         <p className="text-[14px] leading-snug font-semibold break-words text-ink">{ad.name}</p>
-        {(ad.format || ad.lengthSeconds) && (
-          <p className="mt-1 text-[12.5px] text-muted">{[ad.format, ad.lengthSeconds && `${ad.lengthSeconds}s`].filter(Boolean).join(" · ")}</p>
-        )}
-        {due && (
+        {ad.meta && <p className="mt-1 text-[12.5px] text-muted">{ad.meta}</p>}
+        {(due || ad.tag) && (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${TONE[due.tone]}`}>{due.text}</span>
+            {ad.tag && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11.5px] font-semibold text-brand">{ad.tag}</span>}
+            {due && <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-medium ${TONE[due.tone]}`}>{due.text}</span>}
           </div>
         )}
       </Link>
@@ -158,7 +170,7 @@ function AdCard({
         <span className="sr-only">Move {ad.name} to</span>
         <select
           value={stage}
-          onChange={(e) => onMove(e.target.value as AdStage)}
+          onChange={(e) => onMove(e.target.value)}
           className="w-full cursor-pointer bg-transparent text-[12.5px] font-medium text-muted focus:outline-none"
         >
           {columns.map((c) => (

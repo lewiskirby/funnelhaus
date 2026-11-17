@@ -9,7 +9,7 @@ import * as notion from "./notion";
 import { isWebinar } from "@/lib/calendar";
 import { sendPortalEmail } from "@/lib/email";
 import { ANSWER_MAX, BLOCK_TEXT_MAX } from "@/lib/limits";
-import type { AdCreative, AdStage, BlockEdits, Client, ClientEvent, ContentBlock, EditableBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
+import type { AdCreative, AdStage, BlockEdits, Client, ClientEvent, ContentBlock, ContentPost, Freebie, EditableBlock, LaunchTask, PortalUser, TableBlock, Task, TaskRecord, TaskStatus } from "@/lib/types";
 
 export const RESPONSE_MAX = notion.RESPONSE_MAX;
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete"];
@@ -501,6 +501,61 @@ export async function getClientAd(clientId: string, adId: string): Promise<{ ad:
     // Show the ad without its content rather than failing.
   }
   return { ad: toClientAd(ad), content };
+}
+
+// ── Organic content ─────────────────────────────────
+// Only posts whose Client relation includes this client are ever returned.
+
+function toClientPost(record: notion.ContentRecord): ContentPost {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { clientIds, freebieIds, ...post } = record;
+  return post;
+}
+
+export async function getClientContent(clientId: string): Promise<ContentPost[]> {
+  try {
+    const posts = await notion.queryClientContent(clientId);
+    return posts.filter((post) => post.clientIds.some((id) => sameId(id, clientId))).map(toClientPost);
+  } catch {
+    return []; // Details are logged in notion.ts.
+  }
+}
+
+/** One post, the freebies its keyword sends, and its page content (guidelines and script), if it belongs to this client. */
+export async function getClientContentPost(
+  clientId: string,
+  postId: string,
+): Promise<{ post: ContentPost; freebies: Freebie[]; content: ContentBlock[] } | null> {
+  const post = await notion.getContentPage(postId);
+  if (!post || !post.clientIds.some((id) => sameId(id, clientId))) return null;
+  const [content, freebies] = await Promise.all([
+    notion.getPageContent(postId, { fresh: true }).catch(() => [] as ContentBlock[]), // show the post without it rather than failing
+    Promise.all(post.freebieIds.slice(0, 5).map((id) => notion.getFreebiePage(id))),
+  ]);
+  return { post: toClientPost(post), freebies: freebies.filter((f): f is Freebie => f !== null), content };
+}
+
+/** The Content board's columns: every Organic Content Status in Notion's order, except Unused. */
+export async function getContentStatuses(): Promise<string[]> {
+  try {
+    return await notion.queryContentStatuses();
+  } catch {
+    return []; // Details are logged in notion.ts. The page falls back to the statuses the posts use.
+  }
+}
+
+/** Moves one of this client's posts to another column. Only posts linked to this client can be moved. */
+export async function moveClientContent(clientId: string, postId: string, stage: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(await notion.queryContentStatuses().catch(() => [] as string[])).includes(stage)) return { ok: false, error: "That column doesn't exist." };
+  const post = await notion.getContentPage(postId);
+  if (!post || !post.clientIds.some((id) => sameId(id, clientId))) return { ok: false, error: "We couldn't find that post." };
+  if (post.stage === stage) return { ok: true };
+  try {
+    await notion.setContentStatusInNotion(postId, stage);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We couldn't move that post. Please try again." };
+  }
 }
 
 // ── What FunnelHaus is working on ───────────────────

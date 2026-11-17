@@ -60,6 +60,9 @@ export const Icon = {
   megaphone: (p: IconProps) => (
     <svg {...base(p)}><path d="M3 8.5v3a1 1 0 0 0 1 1h2l7 3.5V4L6 7.5H4a1 1 0 0 0-1 1Z" /><path d="m6 12.5 1 4.5h2l-.8-3.7" /><path d="M16 7.5a3 3 0 0 1 0 5" /></svg>
   ),
+  camera: (p: IconProps) => (
+    <svg {...base(p)}><rect x="2.5" y="5" width="15" height="11" rx="2" /><path d="M7 5 8.2 3h3.6L13 5" /><circle cx="10" cy="10.5" r="3" /></svg>
+  ),
   users: (p: IconProps) => (
     <svg {...base(p)}><circle cx="7.5" cy="7" r="3" /><path d="M2 16.5c0-2.8 2.5-4.5 5.5-4.5s5.5 1.7 5.5 4.5" /><path d="M13 4.2a3 3 0 0 1 0 5.6M15 12.3c1.8.6 3 2 3 4.2" /></svg>
   ),

@@ -8,7 +8,8 @@ const items = [
   { href: "/", label: "Home", icon: Icon.home },
   { href: "/tasks", label: "Tasks", icon: Icon.tasks },
   { href: "/calendar", label: "Calendar", icon: Icon.calendar },
-  { href: "/ads", label: "Ad creatives", icon: Icon.megaphone },
+  { href: "/ads", label: "Ad creatives", short: "Ads", icon: Icon.megaphone },
+  { href: "/content", label: "Content", icon: Icon.camera },
   { href: "/results", label: "Results", icon: Icon.chart },
   { href: "/team", label: "Team", icon: Icon.users },
 ] as const;
@@ -48,18 +49,20 @@ export function BottomNav({ openTasks }: { openTasks: number }) {
   const pathname = usePathname();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      <div className="mx-auto grid max-w-lg grid-cols-6">
-        {items.map(({ href, label, icon: ItemIcon }) => {
+      <div className="mx-auto grid max-w-lg grid-cols-7">
+        {items.map((item) => {
+          const { href, label, icon: ItemIcon } = item;
           const active = isActive(pathname, href);
           return (
             <Link
               key={href}
               href={href}
+              aria-label={label}
               aria-current={active ? "page" : undefined}
               className={`relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium ${active ? "text-brand" : "text-muted"}`}
             >
               <ItemIcon className="size-[22px]" />
-              {label}
+              {"short" in item ? item.short : label}
               {href === "/tasks" && openTasks > 0 && (
                 <span className="absolute top-1.5 left-1/2 ml-2 rounded-full bg-brand px-1.5 text-[10px] font-semibold leading-4 text-white">
                   {openTasks}

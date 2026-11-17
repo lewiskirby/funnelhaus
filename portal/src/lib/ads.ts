@@ -1,6 +1,6 @@
 // How ad stages and due dates read to a client. Shared by the Ads board and ad pages.
 
-import type { AdStage } from "@/lib/types";
+import type { AdStage, ContentBlock } from "@/lib/types";
 
 // The board has one column per Status in the Ad Creatives database, in Notion's order,
 // so adding, renaming or removing a status in Notion changes the board. These add
@@ -36,4 +36,23 @@ export function dueLabel(due: string): { text: string; tone: "overdue" | "soon" 
   if (days === 0) return { text: "Due today", tone: "soon" };
   if (days === 1) return { text: "Due tomorrow", tone: "soon" };
   return { text: `Due ${date}`, tone: days <= 3 ? "soon" : "later" };
+}
+
+const cellText = (cell: { text: string }[]) => cell.map((t) => t.text).join("").trim();
+
+/**
+ * The script on its own: column 1 of the first table on an ad or post page, one line
+ * per row. The header row (if the table has one) and empty cells are skipped.
+ */
+export function scriptLines(blocks: ContentBlock[]): string[] {
+  for (const block of blocks) {
+    if (block.type === "table") {
+      return (block.header ? block.rows.slice(1) : block.rows).map((row) => cellText(row[0] ?? [])).filter(Boolean);
+    }
+    if ("children" in block && block.children) {
+      const inner = scriptLines(block.children);
+      if (inner.length) return inner;
+    }
+  }
+  return [];
 }

@@ -3,11 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NotionContent } from "@/components/notion-content";
 import { Icon } from "@/components/ui";
-import { columnFor, dueLabel } from "@/lib/ads";
+import { columnFor, dueLabel, scriptLines } from "@/lib/ads";
 import { getClientAd } from "@/lib/data";
 import { requireClient } from "@/lib/session";
-import type { ContentBlock } from "@/lib/types";
-import { FullScript } from "./full-script";
+import { FullScript } from "@/components/full-script";
 
 export async function generateMetadata({ params }: PageProps<"/ads/[id]">): Promise<Metadata> {
   const client = await requireClient();
@@ -18,25 +17,6 @@ export async function generateMetadata({ params }: PageProps<"/ads/[id]">): Prom
 const WHAT_TO_DO: Partial<Record<string, string>> = {
   "Ready to film": "Film this ad using the script below, then upload the footage to the Ad Creative Uploads folder inside your Asset upload folder (linked on your Home page) and let us know.",
 };
-
-const cellText = (cell: { text: string }[]) => cell.map((t) => t.text).join("").trim();
-
-/**
- * The script on its own: column 1 of the first table on the ad's page, one line
- * per row. The header row (if the table has one) and empty cells are skipped.
- */
-function scriptLines(blocks: ContentBlock[]): string[] {
-  for (const block of blocks) {
-    if (block.type === "table") {
-      return (block.header ? block.rows.slice(1) : block.rows).map((row) => cellText(row[0] ?? [])).filter(Boolean);
-    }
-    if ("children" in block && block.children) {
-      const inner = scriptLines(block.children);
-      if (inner.length) return inner;
-    }
-  }
-  return [];
-}
 
 export default async function AdPage({ params }: PageProps<"/ads/[id]">) {
   const client = await requireClient();
